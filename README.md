@@ -27,8 +27,8 @@ How do historical weather patterns and vegetation health influence crop yields a
 │  └─────┬─────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘   │
 │        │               │                 │                    │             │
 │  ┌─────▼─────┐  ┌──────▼───────┐  ┌──────▼───────┐  ┌────────▼─────────┐   │
-│  │ Sqoop     │  │ Flume Agent  │  │ rasterio     │  │ geopandas        │   │
-│  │ Import    │  │ (Simulated)  │  │ + rasterstats│  │ + PostGIS        │   │
+│  │ PostgreSQL│  │ Flume Agent  │  │ rasterio     │  │ geopandas        │   │
+│  │ → HDFS    │  │ (Simulated)  │  │ + rasterstats│  │ + PostGIS        │   │
 │  └─────┬─────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘   │
 │        │               │                 │                    │             │
 │  ══════╪═══════════════╪═════════════════╪════════════════════╪═════════    │
@@ -144,9 +144,9 @@ Loads downloaded data into the polyglot database layer:
 - NOAA weather → consolidated CSV mapped to nearest agricultural region
 - MODIS GeoTIFF → zonal NDVI statistics via rasterio + rasterstats
 
-### Sqoop Import (`sqoop_ingest.py`)
+### PostgreSQL → HDFS Export (`sqoop_ingest.py`)
 
-Simulates Apache Sqoop to import relational data from PostgreSQL into the HDFS/Hive warehouse:
+Exports relational data from PostgreSQL into the HDFS warehouse via WebHDFS, following the Apache Sqoop import pattern:
 
 ```bash
 python sqoop_ingest.py import \
@@ -162,12 +162,14 @@ python sqoop_ingest.py import \
 4. **Hive ORC:** Writes weather indices to Hive warehouse in ORC columnar format for efficient batch analytics.
 5. **Feature Engineering:** Joins weather and NDVI via Spark SQL. Creates lag features (NDVI and precipitation at t-1, t-2) using window functions. Outputs to PostgreSQL via JDBC.
 
-### Flume Simulation (`flume_agent.py`)
+### Flume Ingestion Agent (`flume_agent.py`)
 
-Simulates Apache Flume's architecture with:
+Implements the Apache Flume Source-Channel-Sink architecture pattern to ingest live weather data:
 - **Spooling Directory Source:** Monitors a directory for new weather CSV files
 - **Memory Channel:** In-memory buffer with configurable capacity (10,000 records)
-- **HDFS Sink:** Batches records and writes to HDFS in configurable intervals
+- **HDFS Sink:** Batches records and writes to HDFS via WebHDFS in configurable intervals
+
+The producer fetches **real-time weather observations** from the [Open-Meteo API](https://open-meteo.com/) for all 25 agricultural regions, writing CSV files that the agent picks up and streams into HDFS.
 
 ```bash
 python flume_agent.py --mode demo --duration 30 --rate 5
@@ -249,7 +251,7 @@ ORC consistently outperforms CSV for analytical workloads due to columnar storag
 climate-smart-agriculture/
 ├── README.md                 # This file
 ├── LICENSE                   # MIT License
-├── Dockerfile                # Python 3.10 + Java + GDAL + PySpark
+├── Dockerfile                # Python 3.10 + Java 21 + GDAL + PySpark
 ├── docker-compose.yml        # 7 services: Postgres, MongoDB, HBase, HDFS, Spark, App
 ├── hadoop.env                # Hadoop configuration environment variables
 ├── spark-defaults.conf       # Spark Java module access configuration
@@ -258,9 +260,9 @@ climate-smart-agriculture/
 ├── download_data.py          # [Phase 1] Real data download from FAO, NOAA, GADM
 ├── download_modis_real.py    # [Phase 1] Automated NASA MODIS Real Data Downloader via earthaccess
 ├── data_ingest.py            # [Phase 2] Load data into PostgreSQL, MongoDB, prepare CSVs
-├── sqoop_ingest.py           # [Phase 3] Simulated Sqoop import: PostgreSQL → HDFS
+├── sqoop_ingest.py           # [Phase 3] PostgreSQL → HDFS export via WebHDFS
 ├── pipeline.py               # [Phase 4] PySpark ETL: zonal stats, cleaning, features
-├── flume_agent.py            # [Phase 5] Simulated Flume ingestion agent
+├── flume_agent.py            # [Phase 5] Flume-style ingestion agent (live Open-Meteo API data)
 ├── spark_streaming.py        # [Phase 6] Spark Structured Streaming job
 ├── ml_model.py               # [Phase 7] Spark MLlib Random Forest + cross-validation
 ├── benchmark.py              # [Phase 8] Performance benchmarks (HBase vs SQL vs Hive)
@@ -335,9 +337,9 @@ bash run_all.sh
 | 1 | Start Docker infrastructure | `docker-compose up -d` |
 | 2 | Wait for services to boot | 40s health check |
 | 3 | Ingest data into databases + HDFS | `data_ingest.py` |
-| 4 | Sqoop import to HDFS warehouse | `sqoop_ingest.py` |
+| 4 | Export crop yields from PostgreSQL → HDFS | `sqoop_ingest.py` |
 | 5 | PySpark ETL pipeline | `pipeline.py` |
-| 6 | Flume ingestion simulation | `flume_agent.py` |
+| 6 | Flume ingestion (live weather from Open-Meteo API) | `flume_agent.py` |
 | 7 | Spark Structured Streaming demo | `spark_streaming.py` |
 | 8 | ML model training + cross-validation | `ml_model.py` |
 | 9 | Performance benchmarks | `benchmark.py` |
@@ -364,4 +366,4 @@ After pipeline completion:
 | NOAA station sparsity in some countries (e.g., Kenya) | Nearest-station mapping using spatial distance to region centroids |
 | Data skew across countries | Custom region-balanced partitioning in Spark |
 | MODIS NoData values and scale factors | Handled -3000 fill values, applied ÷10000 scaling in GeoTIFF processing |
-| Real-time ingestion without full Flume/Kafka | Simulated Flume Source-Channel-Sink architecture with HDFS persistence |
+| Real-time ingestion without full Flume/Kafka | Implemented Flume Source-Channel-Sink pattern with live Open-Meteo API data and HDFS persistence |
