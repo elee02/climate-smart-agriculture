@@ -19,9 +19,23 @@ import sys
 import argparse
 import earthaccess
 import rasterio
+import cmr
+
+# Fix python-cmr parameter encoding bug causing NASA CMR 500 errors (bracketed keys like temporal[])
+original_build_url = cmr.queries.Query._build_url
+
+def patched_build_url(self):
+    url = original_build_url(self)
+    return url.replace("[]=", "=").replace("%5B%5D=", "=")
+
+cmr.queries.Query._build_url = patched_build_url
 
 # Target tiles matching target countries
-TARGET_TILES = ["h10v05", "h25v06", "h13v10", "h27v05", "h21v08"]
+TARGET_TILES = [
+    "h10v04", "h10v05", "h11v04", "h11v05", "h12v10", "h13v10", "h13v11",
+    "h21v08", "h21v09", "h24v05", "h24v06", "h25v06", "h25v07", "h26v04",
+    "h27v05", "h28v05"
+]
 MODIS_DIR = "data/raw/modis"
 
 
@@ -87,7 +101,8 @@ def main():
     parser.add_argument("--username", help="NASA Earthdata username")
     parser.add_argument("--password", help="NASA Earthdata password")
     parser.add_argument("--token", help="NASA Earthdata token (Generate Token on EarthData page)")
-    parser.add_argument("--year", type=int, default=2024, help="Target year to download (default: 2024)")
+    parser.add_argument("--year", type=int, help="Single target year to download")
+    parser.add_argument("--years", nargs=2, type=int, default=[2015, 2026], metavar=("START", "END"), help="Target years range to download (default: 2015 2026)")
     args = parser.parse_args()
 
     os.makedirs(MODIS_DIR, exist_ok=True)
@@ -99,9 +114,17 @@ def main():
         password = args.password or os.environ.get("EARTHDATA_PASSWORD")
 
         if token:
-            os.environ["EARTHDATA_TOKEN"] = token
-            print("Authenticating with NASA Earthdata Token...")
-            auth = earthaccess.login(strategy="environment")
+            cleaned_token = token.replace("\n", "").replace("\r", "").replace(" ", "").replace("\\n", "")
+            os.environ["EARTHDATA_TOKEN"] = cleaned_token
+            print("Authenticating with NASA Earthdata Token (bypassing EDL credentials)...")
+            auth = earthaccess.Auth()
+            auth.username = "elee02"
+            auth.password = ""
+            auth.token = {"access_token": cleaned_token}
+            auth.authenticated = True
+            
+            earthaccess.__auth__ = auth
+            earthaccess.__store__ = earthaccess.store.Store(auth)
         elif username and password:
             os.environ["EARTHDATA_USERNAME"] = username
             os.environ["EARTHDATA_PASSWORD"] = password
@@ -124,77 +147,87 @@ def main():
         print("\n💡 TIP: Ensure that you have authorized the 'LPDAAC_ECS' application in your NASA Earthdata Profile.")
         sys.exit(1)
 
-    print(f"\nSearching for MOD13Q1.061 granules for year {args.year}...")
-    try:
-        results = earthaccess.search_data(
-            short_name="MOD13Q1",
-            version="061",
-            temporal=(f"{args.year}-01-01", f"{args.year}-12-31")
-        )
-    except Exception as e:
-        print(f"Search failed: {e}")
-        sys.exit(1)
+    if args.year:
+        years = [args.year]
+    else:
+        years = list(range(args.years[0], args.years[1] + 1))
 
-    print(f"Found {len(results)} total granules. Filtering by target tiles: {TARGET_TILES}...")
-    
-    # Filter granules by target tiles
-    filtered_results = []
-    for granule in results:
-        filename = granule["meta"]["native-id"] + ".hdf"
-        if any(tile in filename for tile in TARGET_TILES):
-            filtered_results.append(granule)
+    total_success_count = 0
+    total_granules_processed = 0
 
-    print(f"Found {len(filtered_results)} matching granules for target tiles.")
-    if not filtered_results:
-        print("No matching granules found. Exiting.")
-        sys.exit(0)
-
-    # Download and process each granule
-    success_count = 0
-    for idx, granule in enumerate(filtered_results):
-        filename = granule["meta"]["native-id"] + ".hdf"
-        print(f"\n[{idx+1}/{len(filtered_results)}] Processing {filename}...")
-        
-        # Local GeoTIFF target path
-        local_tiff = os.path.join(MODIS_DIR, filename.replace(".hdf", ".tif"))
-
-        if os.path.exists(local_tiff):
-            print(f"    ⏩ GeoTIFF already exists, skipping.")
-            success_count += 1
+    for year in years:
+        print(f"\nSearching for MOD13Q1.061 granules for year {year}...")
+        try:
+            results = earthaccess.search_data(
+                short_name="MOD13Q1",
+                version="061",
+                temporal=(f"{year}-01-01", f"{year}-12-31")
+            )
+        except Exception as e:
+            print(f"Search failed for year {year}: {e}")
             continue
 
-        try:
-            # Download single HDF granule
-            paths = earthaccess.download([granule], local_path=MODIS_DIR)
-            if not paths:
-                print(f"    ✗ Download failed for {filename}")
-                print("\n    💡 TIP: If the download fails with a 404 or unauthorized error, ensure that you have")
-                print("       authorized the 'LPDAAC_ECS' and 'NASA GESDISC DATA POOL' applications in your NASA Earthdata Profile:")
-                print("       1. Log in to https://urs.earthdata.nasa.gov/")
-                print("       2. Navigate to 'Applications' -> 'Authorized Apps'")
-                print("       3. If LPDAAC_ECS is not listed, click 'Approve More Applications' and approve it.")
-                continue
-            
-            local_hdf = next((str(p) for p in paths if str(p).endswith('.hdf')), None)
-            if not local_hdf:
-                print(f"    ✗ No HDF file downloaded for {filename}")
-                continue
-            
-            # Convert to GeoTIFF
-            print(f"    Converting to GeoTIFF...")
-            success = extract_ndvi_to_tiff(local_hdf, local_tiff)
-            
-            # Clean up the downloaded HDF
-            if os.path.exists(local_hdf):
-                os.remove(local_hdf)
+        print(f"Found {len(results)} total granules. Filtering by target tiles: {TARGET_TILES}...")
+        
+        # Filter granules by target tiles
+        filtered_results = []
+        for granule in results:
+            filename = granule["meta"]["native-id"] + ".hdf"
+            if any(tile in filename for tile in TARGET_TILES):
+                filtered_results.append(granule)
 
-            if success:
-                success_count += 1
-                print(f"    ✓ Successfully saved: {os.path.basename(local_tiff)}")
-        except Exception as e:
-            print(f"    ✗ Error processing {filename}: {e}")
+        print(f"Found {len(filtered_results)} matching granules for target tiles in year {year}.")
+        if not filtered_results:
+            print(f"No matching granules found for year {year}.")
+            continue
 
-    print(f"\n✓ Completed. Successfully processed {success_count}/{len(filtered_results)} tiles.")
+        total_granules_processed += len(filtered_results)
+
+        # Download and process each granule
+        for idx, granule in enumerate(filtered_results):
+            filename = granule["meta"]["native-id"] + ".hdf"
+            print(f"\n[{idx+1}/{len(filtered_results)}] Processing {filename}...")
+            
+            # Local GeoTIFF target path
+            local_tiff = os.path.join(MODIS_DIR, filename.replace(".hdf", ".tif"))
+
+            if os.path.exists(local_tiff):
+                print(f"    ⏩ GeoTIFF already exists, skipping.")
+                total_success_count += 1
+                continue
+
+            try:
+                # Download single HDF granule
+                paths = earthaccess.download([granule], local_path=MODIS_DIR)
+                if not paths:
+                    print(f"    ✗ Download failed for {filename}")
+                    print("\n    💡 TIP: If the download fails with a 404 or unauthorized error, ensure that you have")
+                    print("       authorized the 'LPDAAC_ECS' and 'NASA GESDISC DATA POOL' applications in your NASA Earthdata Profile:")
+                    print("       1. Log in to https://urs.earthdata.nasa.gov/")
+                    print("       2. Navigate to 'Applications' -> 'Authorized Apps'")
+                    print("       3. If LPDAAC_ECS is not listed, click 'Approve More Applications' and approve it.")
+                    continue
+                
+                local_hdf = next((str(p) for p in paths if str(p).endswith('.hdf')), None)
+                if not local_hdf:
+                    print(f"    ✗ No HDF file downloaded for {filename}")
+                    continue
+                
+                # Convert to GeoTIFF
+                print(f"    Converting to GeoTIFF...")
+                success = extract_ndvi_to_tiff(local_hdf, local_tiff)
+                
+                # Clean up the downloaded HDF
+                if os.path.exists(local_hdf):
+                    os.remove(local_hdf)
+
+                if success:
+                    total_success_count += 1
+                    print(f"    ✓ Successfully saved: {os.path.basename(local_tiff)}")
+            except Exception as e:
+                print(f"    ✗ Error processing {filename}: {e}")
+
+    print(f"\n✓ Completed. Successfully processed {total_success_count}/{total_granules_processed} tiles.")
     print(f"All GeoTIFF files are located in: {os.path.abspath(MODIS_DIR)}/")
 
 

@@ -140,7 +140,7 @@
                         <span>NDVI Vegetation Index Trend</span>
                         <span class="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded">HBase Live Query</span>
                     </h2>
-                    <p class="text-xs text-gray-500 mb-3">Fetches 20-year satellite measurements directly from HBase using key prefix scan.</p>
+                    <p class="text-xs text-gray-500 mb-3">Fetches satellite NDVI measurements from HBase using key prefix scan.</p>
                     <div class="h-64">
                         <canvas id="ndviChart"></canvas>
                     </div>
@@ -488,7 +488,7 @@
                         scales: {
                             x: {
                                 type: 'logarithmic',
-                                min: 0.1,
+                                min: 0.01,
                                 ticks: {
                                     color: '#9ca3af',
                                     callback: function(value) {

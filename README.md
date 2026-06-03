@@ -128,7 +128,11 @@ python download_data.py --source noaa         # Just NOAA weather
 python download_data.py --source gadm         # Just GADM boundaries
 
 # For MODIS data, use the dedicated earthaccess downloader:
-python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --year 2024
+# Using username and password:
+python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2026
+
+# Alternatively, using an Earthdata Login token:
+python download_modis_real.py --token YOUR_TOKEN --years 2015 2026
 ```
 
 - **FAOSTAT:** Bulk CSV download from FAO's public server, filtered for target countries and crops.
@@ -140,9 +144,9 @@ python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD 
 
 Loads downloaded data into the polyglot database layer:
 - GADM shapefiles → PostGIS (real geometries) + MongoDB (GeoJSON)
-- FAOSTAT CSV → PostgreSQL `crop_yields` table (distributed to 25 regions with regional variance)
+- FAOSTAT CSV → PostgreSQL `crop_yields` table (fully matches Soybean statistics by mapping "soy beans" variants, distributed to 25 regions with regional variance)
 - NOAA weather → consolidated CSV mapped to nearest agricultural region
-- MODIS GeoTIFF → zonal NDVI statistics via rasterio + rasterstats
+- MODIS GeoTIFF → hybrid zonal NDVI statistics via rasterio + rasterstats. It processes available GeoTIFF tiles, automatically falls back to phenology-based NDVI records for missing regions/years (2015-2024), and caches calculated zonal stats in `data/processed_tiles_cache.json` to optimize subsequent runs.
 
 ### PostgreSQL → HDFS Export (`sqoop_ingest.py`)
 
@@ -171,10 +175,6 @@ Implements the Apache Flume Source-Channel-Sink architecture pattern to ingest l
 
 The producer fetches **real-time weather observations** from the [Open-Meteo API](https://open-meteo.com/) for all 25 agricultural regions, writing CSV files that the agent picks up and streams into HDFS.
 
-```bash
-python flume_agent.py --mode demo --duration 30 --rate 5
-```
-
 ### Spark Structured Streaming (`spark_streaming.py`)
 
 Monitors the HDFS streaming directory for new weather observations (produced by Flume) and processes them in near-real-time:
@@ -184,9 +184,11 @@ Monitors the HDFS streaming directory for new weather observations (produced by 
 - Writes updated summaries to HBase via `foreachBatch` sink
 - Uses HDFS-based checkpointing for fault tolerance
 
-```bash
-spark-submit spark_streaming.py --duration 60 --trigger-interval 15
-```
+### Persistent Background Streaming Pipeline
+After the initial ETL completes, `run_all.sh` spins up both the **Flume Agent** and **Spark Structured Streaming** to run continuously in the background inside the container:
+- The streaming pipeline continues to fetch live weather data and update HBase.
+- Log outputs are routed to `data/flume_agent.log` and `data/spark_streaming.log` on the host for real-time monitoring.
+- The processes run indefinitely until all containers are stopped via `docker-compose down`.
 
 ---
 
@@ -322,7 +324,10 @@ pip install requests pandas numpy geopandas shapely
 python download_data.py --source all --years 2015 2024
 
 # 3. Download MODIS data via earthaccess (requires NASA Earthdata account)
-python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --year 2024
+# Using username and password:
+python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2026
+# Or using Earthdata Login token:
+python download_modis_real.py --token YOUR_TOKEN --years 2015 2026
 
 # 4. Run the full pipeline (Docker)
 chmod +x run_all.sh
@@ -336,13 +341,14 @@ bash run_all.sh
 | 0 | Download real-world data | `download_data.py`, `download_modis_real.py` |
 | 1 | Start Docker infrastructure | `docker-compose up -d` |
 | 2 | Wait for services to boot | 40s health check |
-| 3 | Ingest data into databases + HDFS | `data_ingest.py` |
-| 4 | Export crop yields from PostgreSQL → HDFS | `sqoop_ingest.py` |
+| 3 | Ingest data into databases + HDFS | `data_ingest.py` (with zonal stats cache & hybrid fallback) |
+| 4 | Export crop yields from PostgreSQL → HDFS | `sqoop_ingest.py` (with Soybean mappings) |
 | 5 | PySpark ETL pipeline | `pipeline.py` |
 | 6 | Flume ingestion (live weather from Open-Meteo API) | `flume_agent.py` |
 | 7 | Spark Structured Streaming demo | `spark_streaming.py` |
 | 8 | ML model training + cross-validation | `ml_model.py` |
 | 9 | Performance benchmarks | `benchmark.py` |
+| 10 | Start persistent background streaming pipeline | `flume_agent.py` & `spark_streaming.py` |
 
 ### Web Interfaces
 

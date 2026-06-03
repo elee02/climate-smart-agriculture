@@ -328,7 +328,11 @@ def load_fao_crop_yields(pg_conn, regions):
                 # Determine crop name
                 crop = None
                 for target_crop in TARGET_CROPS:
-                    if target_crop in item:
+                    if target_crop == "soybean":
+                        if "soy" in item:
+                            crop = "Soybean"
+                            break
+                    elif target_crop in item:
                         crop = target_crop.capitalize()
                         break
                 if crop is None:
@@ -381,7 +385,7 @@ def _generate_fao_fallback(pg_conn, regions):
     for iso3, region_map in TARGET_REGIONS.items():
         baselines = BASELINES.get(iso3, {})
         for cid in region_map.keys():
-            for year in range(2015, 2025):
+            for year in range(2015, 2027):
                 climate_trend = -0.008 * (year - 2015)
                 for crop, base_yield in baselines.items():
                     var = random.normalvariate(0, base_yield * 0.08)
@@ -514,7 +518,7 @@ def _generate_weather_fallback(regions):
         base_temp = normals["temp"]
         base_rain = normals["rain"]
 
-        dates = pd.date_range("2015-01-01", periods=10 * 365, freq="D")
+        dates = pd.date_range(start="2015-01-01", end="2026-12-31", freq="D")
         for dt in dates:
             doy = dt.dayofyear
             temp_season = 12.0 * np.sin(2 * np.pi * (doy - 110) / 365.0)
@@ -546,29 +550,77 @@ def _generate_weather_fallback(regions):
 # ──────────────────────────────────────────────────────────────────────
 
 def prepare_satellite_data(regions):
-    """Process MODIS GeoTIFF files into zonal statistics CSV, or generate fallback."""
+    """Process MODIS GeoTIFF files into zonal statistics CSV, and fill missing gaps with fallback."""
     print("\n--- 5. Preparing Satellite NDVI Data ---")
 
     geotiff_files = glob.glob(os.path.join(MODIS_DIR, "**/*.tif"), recursive=True)
 
+    real_records = []
     if geotiff_files:
         print(f"  Found {len(geotiff_files)} GeoTIFF files. Computing zonal statistics...")
-        _process_geotiff_files(geotiff_files, regions)
+        real_records = _process_geotiff_files(geotiff_files, regions)
     else:
         print(f"  No GeoTIFF files found in {MODIS_DIR}")
-        print("  Generating NDVI data from MODIS phenology baselines...")
-        _generate_ndvi_fallback(regions)
+
+    # Build set of existing (county_id, date) pairs from real data
+    existing_keys = set()
+    for r in real_records:
+        existing_keys.add((r["county_id"], r["date"]))
+
+    # Generate fallback records for any missing (county_id, date) combinations from 2015-2026
+    BASE_NDVI = {
+        "USA": 0.72, "IND": 0.55, "BRA": 0.68, "CHN": 0.62, "KEN": 0.45,
+    }
+
+    fallback_records = []
+    dates = pd.date_range(start="2015-01-01", end="2026-12-31", freq="16D")
+    
+    for region in regions:
+        cid = region["county_id"]
+        country = region["country"]
+        base_val = BASE_NDVI.get(country, 0.5)
+
+        for dt in dates:
+            date_str = dt.strftime("%Y-%m-%d")
+            if (cid, date_str) not in existing_keys:
+                doy = dt.dayofyear
+                seasonal = 0.20 * np.sin(2 * np.pi * (doy - 90) / 365.0)
+
+                # Generate 5x5 pixel grid
+                for px in range(5):
+                    for py in range(5):
+                        noise = 0.04 * (px + py) / 8.0 + random.normalvariate(0, 0.04)
+                        ndvi = max(-0.05, min(0.99, base_val + seasonal + noise))
+                        fallback_records.append({
+                            "county_id": cid,
+                            "date": date_str,
+                            "pixel_x": px,
+                            "pixel_y": py,
+                            "ndvi": round(ndvi, 4),
+                        })
+
+    combined_records = real_records + fallback_records
+    
+    if combined_records:
+        df = pd.DataFrame(combined_records)
+        out_path = os.path.join(PROCESSED_DIR, "satellite_ndvi_pixels.csv")
+        os.makedirs(PROCESSED_DIR, exist_ok=True)
+        df.to_csv(out_path, index=False)
+        import shutil
+        shutil.copy(out_path, os.path.join(BASE_DATA_DIR, "satellite_ndvi_pixels.csv"))
+        print(f"  ✓ Saved {len(df):,} total NDVI records (Real: {len(real_records)}, Fallback: {len(fallback_records)}) -> {out_path}")
+    else:
+        print("  ⚠ No NDVI records generated.")
 
 
 def _process_geotiff_files(geotiff_files, regions):
-    """Compute zonal NDVI statistics from real GeoTIFF rasters."""
+    """Compute zonal NDVI statistics from real GeoTIFF rasters and return list of records."""
     try:
         import rasterio
         from rasterstats import zonal_stats
     except ImportError:
-        print("  ⚠ rasterio/rasterstats not installed. Falling back to synthetic data.")
-        _generate_ndvi_fallback(regions)
-        return
+        print("  ⚠ rasterio/rasterstats not installed. Returning empty list.")
+        return []
 
     # Build a GeoDataFrame of region polygons for zonal stats
     gdf = gpd.GeoDataFrame(
@@ -576,11 +628,27 @@ def _process_geotiff_files(geotiff_files, regions):
         crs="EPSG:4326",
     )
 
+    cache_path = os.path.join(BASE_DATA_DIR, "processed_tiles_cache.json")
+    cache = {}
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r") as f:
+                cache = json.load(f)
+            print(f"  Loaded zonal stats cache for {len(cache)} files.")
+        except Exception as e:
+            print(f"  ⚠ Failed to load cache: {e}")
+
     all_records = []
+    cache_updated = False
+
     for i, tif_path in enumerate(geotiff_files):
+        basename = os.path.basename(tif_path)
+        if basename in cache:
+            all_records.extend(cache[basename])
+            continue
+
         try:
             # Extract date from filename (MODIS naming: MOD13Q1.AYYYYDDD.*.tif)
-            basename = os.path.basename(tif_path)
             date_str = _parse_modis_date(basename)
             if not date_str:
                 continue
@@ -605,15 +673,20 @@ def _process_geotiff_files(geotiff_files, regions):
                     nodata=np.nan,
                 )
 
+                file_records = []
                 for j, stat in enumerate(stats):
                     if stat.get("mean") is not None:
-                        all_records.append({
+                        file_records.append({
                             "county_id": int(zones.iloc[j]["county_id"]),
                             "date": date_str,
                             "pixel_x": 0,
                             "pixel_y": 0,
                             "ndvi": round(stat["mean"], 4),
                         })
+
+                cache[basename] = file_records
+                all_records.extend(file_records)
+                cache_updated = True
 
             if (i + 1) % 10 == 0:
                 print(f"  Processed {i + 1}/{len(geotiff_files)} GeoTIFF files...")
@@ -622,17 +695,15 @@ def _process_geotiff_files(geotiff_files, regions):
             print(f"  ⚠ Error processing {tif_path}: {e}")
             continue
 
-    if all_records:
-        df = pd.DataFrame(all_records)
-        out_path = os.path.join(PROCESSED_DIR, "satellite_ndvi_pixels.csv")
-        os.makedirs(PROCESSED_DIR, exist_ok=True)
-        df.to_csv(out_path, index=False)
-        import shutil
-        shutil.copy(out_path, os.path.join(BASE_DATA_DIR, "satellite_ndvi_pixels.csv"))
-        print(f"  ✓ Extracted {len(df):,} zonal NDVI records from GeoTIFF → {out_path}")
-    else:
-        print("  ⚠ No valid NDVI records extracted. Falling back to synthetic data.")
-        _generate_ndvi_fallback(regions)
+    if cache_updated:
+        try:
+            with open(cache_path, "w") as f:
+                json.dump(cache, f)
+            print(f"  Saved updated zonal stats cache to {cache_path}")
+        except Exception as e:
+            print(f"  ⚠ Failed to save cache: {e}")
+
+    return all_records
 
 
 def _parse_modis_date(filename):
@@ -652,44 +723,7 @@ def _parse_modis_date(filename):
     return None
 
 
-def _generate_ndvi_fallback(regions):
-    """Generate NDVI data based on MODIS phenology baselines per region."""
-    # Baseline peak NDVI values (from literature) by country
-    BASE_NDVI = {
-        "USA": 0.72, "IND": 0.55, "BRA": 0.68, "CHN": 0.62, "KEN": 0.45,
-    }
 
-    records = []
-    for region in regions:
-        cid = region["county_id"]
-        country = region["country"]
-        base_val = BASE_NDVI.get(country, 0.5)
-
-        dates = pd.date_range("2015-01-01", periods=10 * 23, freq="16D")
-        for dt in dates:
-            doy = dt.dayofyear
-            seasonal = 0.20 * np.sin(2 * np.pi * (doy - 90) / 365.0)
-
-            # 5×5 pixel grid per region
-            for px in range(5):
-                for py in range(5):
-                    noise = 0.04 * (px + py) / 8.0 + random.normalvariate(0, 0.04)
-                    ndvi = max(-0.05, min(0.99, base_val + seasonal + noise))
-                    records.append({
-                        "county_id": cid,
-                        "date": dt.strftime("%Y-%m-%d"),
-                        "pixel_x": px,
-                        "pixel_y": py,
-                        "ndvi": round(ndvi, 4),
-                    })
-
-    df = pd.DataFrame(records)
-    os.makedirs(PROCESSED_DIR, exist_ok=True)
-    out_path = os.path.join(PROCESSED_DIR, "satellite_ndvi_pixels.csv")
-    df.to_csv(out_path, index=False)
-    import shutil
-    shutil.copy(out_path, os.path.join(BASE_DATA_DIR, "satellite_ndvi_pixels.csv"))
-    print(f"  ✓ Generated {len(df):,} NDVI pixel records from phenology baselines → {out_path}")
 
 
 # ──────────────────────────────────────────────────────────────────────

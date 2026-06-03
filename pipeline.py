@@ -147,6 +147,9 @@ def process_geotiff_to_csv():
     Uses rasterio + rasterstats to compute mean NDVI per region per date.
     Results are written to a CSV that is then uploaded to HDFS.
     """
+    if os.path.exists("data/satellite_ndvi_pixels.csv"):
+        print("  satellite_ndvi_pixels.csv already exists. Skipping pre-processing.")
+        return True
     try:
         import rasterio
         from rasterstats import zonal_stats
