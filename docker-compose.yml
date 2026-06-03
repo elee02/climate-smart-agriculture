@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: crop_yield_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bigdata-net
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - bigdata-net
+
+  hbase:
+    image: harisekhon/hbase:1.4
+    container_name: hbase
+    ports:
+      - "16010:16010" # HBase Web UI
+      - "9090:9090"   # HBase Thrift API
+      - "2181:2181"   # Zookeeper
+    volumes:
+      - hbase_data:/data
+    networks:
+      - bigdata-net
+
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+    networks:
+      - bigdata-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    env_file:
+      - ./hadoop.env
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+    ports:
+      - "9864:9864"
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    networks:
+      - bigdata-net
+    depends_on:
+      - namenode
+
+  spark:
+    image: apache/spark:3.5.0
+    container_name: spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - .:/app
+    working_dir: /app
+    networks:
+      - bigdata-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bigdata-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    environment:
+      - HBASE_HOST=hbase
+      - MONGO_URI=mongodb://mongodb:27017/
+      - POSTGRES_URI=postgresql://postgres:postgres@postgres:5432/crop_yield_db
+      - HDFS_NAMENODE=hdfs://namenode:9000
+      - SPARK_CONF_DIR=/app
+      - MODIS_DIR=/app/data/raw/modis
+      - GADM_DIR=/app/data/raw/gadm
+      - FLUME_WATCH_DIR=/app/data/streaming_inbox
+      - FLUME_HDFS_DIR=/data/streaming/weather_incoming
+    networks:
+      - bigdata-net
+    depends_on:
+      - postgres
+      - mongodb
+      - hbase
+      - namenode
+      - datanode
+      - spark
+
+volumes:
+  postgres_data:
+  mongo_data:
+  hbase_data:
+  hadoop_namenode:
+  hadoop_datanode:
+
+networks:
+  bigdata-net:
+    driver: bridge
