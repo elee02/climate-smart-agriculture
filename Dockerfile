@@ -1,12 +1,12 @@
 FROM python:3.10-slim
 
 # Install system dependencies:
-#   - Java 17 for PySpark
+#   - Java 21 for PySpark
 #   - GDAL for rasterio/fiona geospatial processing
 #   - gcc/g++ for native compilations
 #   - libpq-dev for psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     gcc \
     g++ \
     libpq-dev \
