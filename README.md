@@ -294,7 +294,7 @@ climate-smart-agriculture/
 | `hbase` | harisekhon/hbase:1.4 | 16010, 9090, 2181 | NoSQL + Thrift API |
 | `namenode` | bde2020/hadoop-namenode | 9870, 9000 | HDFS NameNode |
 | `datanode` | bde2020/hadoop-datanode | 9864 | HDFS DataNode |
-| `spark` | apache/spark:latest | 8080, 7077 | Spark Master |
+| `spark` | apache/spark:3.5.0 | 8080, 7077 | Spark Master |
 | `app` | custom (Dockerfile) | 5000 | Pipeline runner + Flask dashboard |
 
 ---

@@ -5,8 +5,8 @@ FROM python:3.10-slim
 #   - GDAL for rasterio/fiona geospatial processing
 #   - gcc/g++ for native compilations
 #   - libpq-dev for psycopg2
-RUN apt-get update && apt-get install -y \
-    default-jre-headless \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jre-headless \
     gcc \
     g++ \
     libpq-dev \
