@@ -229,9 +229,8 @@ def download_noaa(years):
     max_year = max(years)
     inv_df = inv_df[
         (inv_df["BEGIN"] <= min_year * 10000 + 101) &
-        (inv_df["END"] >= max_year * 10000 + 1231)
+        (inv_df["END"] >= min(max_year * 10000 + 1231, 20260501))
     ]
-
     # Convert lat/lon to numeric
     inv_df["LAT"] = pd.to_numeric(inv_df["LAT"], errors="coerce")
     inv_df["LON"] = pd.to_numeric(inv_df["LON"], errors="coerce")
