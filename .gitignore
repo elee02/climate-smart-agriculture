@@ -38,6 +38,7 @@ partial_*
 data/streaming_inbox/
 data/streaming_processed/
 data/processed/
+data/raw/
 
 # Logs
 *.log
