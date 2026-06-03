@@ -92,9 +92,9 @@ fi
 echo -e "${GREEN}HDFS uploads complete!${NC}"
 
 # ──────────────────────────────────────────────────────────────────────
-# Step 4: Sqoop ingestion simulation
+# Step 4: PostgreSQL → HDFS export (Sqoop-style ingest)
 # ──────────────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[Step 4/9] Simulating Sqoop Import (PostgreSQL → HDFS Warehouse)...${NC}"
+echo -e "\n${YELLOW}[Step 4/9] Exporting Crop Yields from PostgreSQL → HDFS Warehouse...${NC}"
 docker-compose exec -T app python sqoop_ingest.py import \
   --connect jdbc:postgresql://postgres:5432/crop_yield_db \
   --table crop_yields \

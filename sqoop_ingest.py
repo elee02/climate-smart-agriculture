@@ -4,11 +4,11 @@ import psycopg2
 import pandas as pd
 
 def print_help():
-    print("Sqoop Ingestion Tool (Python Wrapper)")
+    print("PostgreSQL → HDFS Export Tool")
     print("Usage: python sqoop_ingest.py import --connect <jdbc_url> --table <table_name> --target-dir <hdfs_path> --username <user> --password <pass>")
 
 def main():
-    print("--- Executing Sqoop Import Command ---")
+    print("--- Executing PostgreSQL → HDFS Export ---")
     print("Arguments passed:", sys.argv)
     
     # Parse CLI parameters
@@ -114,10 +114,10 @@ def main():
         if os.path.exists(temp_csv):
             os.remove(temp_csv)
             
-        print(f"Sqoop Ingest Completed! Data successfully imported into HDFS: {target_dir}/{table_name}.csv")
+        print(f"Export completed! Data successfully imported into HDFS: {target_dir}/{table_name}.csv")
         
     except Exception as e:
-        print("Sqoop execution failed:", e)
+        print("Export failed:", e)
         sys.exit(1)
 
 if __name__ == "__main__":
