@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Climate-Smart Agriculture - Big Data Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet.js (Map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom styling -->
+    <style>
+        body {
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: #111827;
+            border: 1px solid #1f2937;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        #map {
+            height: 480px;
+            border-radius: 0.5rem;
+            z-index: 10;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111827;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #374151;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="p-6">
+    <div class="max-w-7xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center p-6 card rounded-xl border-l-4 border-indigo-500">
+            <div>
+                <h1 class="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-indigo-400">Climate-Smart Agriculture</span>
+                    <span class="text-xs bg-indigo-500/20 text-indigo-400 font-mono px-2.5 py-1 rounded-full uppercase">Big Data Stack</span>
+                </h1>
+                <p class="text-gray-400 mt-1 text-sm md:text-base">Large-Scale Crop Yield Prediction using HDFS, HBase, Hive, PostgreSQL, and PySpark MLlib.</p>
+            </div>
+            <div class="mt-4 md:mt-0 flex gap-3 text-xs font-mono">
+                <div class="flex items-center gap-1.5 bg-green-500/10 text-green-400 px-3 py-1.5 rounded-lg border border-green-500/20">
+                    <span class="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span> HDFS / Hive
+                </div>
+                <div class="flex items-center gap-1.5 bg-cyan-500/10 text-cyan-400 px-3 py-1.5 rounded-lg border border-cyan-500/20">
+                    <span class="h-2 w-2 rounded-full bg-cyan-500 animate-pulse"></span> HBase NoSQL
+                </div>
+                <div class="flex items-center gap-1.5 bg-indigo-500/10 text-indigo-400 px-3 py-1.5 rounded-lg border border-indigo-500/20">
+                    <span class="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></span> PostgreSQL
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI Summary Cards -->
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 card rounded-xl">
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">HDFS Records Processed</p>
+                <p class="text-2xl font-bold text-emerald-400 mt-1">300,000+</p>
+                <span class="text-xs text-gray-500">Daily Weather + Satellite</span>
+            </div>
+            <div class="p-4 card rounded-xl">
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Predictive Model Accuracy</p>
+                <p id="model-r2-val" class="text-2xl font-bold text-indigo-400 mt-1">R² = 0.268</p>
+                <span class="text-xs text-gray-500">Spark MLlib Random Forest</span>
+            </div>
+            <div class="p-4 card rounded-xl">
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">HBase Scan Performance</p>
+                <p class="text-2xl font-bold text-cyan-400 mt-1">~0.5 ms</p>
+                <span class="text-xs text-gray-500">Single Key Range Retrieve</span>
+            </div>
+            <div class="p-4 card rounded-xl">
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Current Scope</p>
+                <p class="text-2xl font-bold text-white mt-1">25 Regions</p>
+                <span class="text-xs text-gray-500">US, India, Brazil, China, Kenya</span>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Content -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Side: Interactive Map & Controls -->
+            <div class="lg:col-span-7 space-y-6">
+                <!-- Map Card -->
+                <div class="card rounded-xl overflow-hidden p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-lg font-bold text-white">Interactive Spatial Yield Analysis</h2>
+                        <div class="flex items-center gap-4 text-sm">
+                            <label class="text-gray-400">Crop:
+                                <select id="cropSelect" class="bg-gray-800 text-white rounded border border-gray-700 px-2.5 py-1 focus:outline-none">
+                                    <option value="Maize">Maize</option>
+                                    <option value="Wheat">Wheat</option>
+                                    <option value="Rice">Rice</option>
+                                    <option value="Soybean">Soybean</option>
+                                </select>
+                            </label>
+                            <label class="text-gray-400">Year:
+                                <select id="yearSelect" class="bg-gray-800 text-white rounded border border-gray-700 px-2.5 py-1 focus:outline-none">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="map"></div>
+                    <div class="mt-3 text-xs text-gray-500 flex justify-between">
+                        <span>💡 Tip: Click on a county polygon to view real-time HBase NDVI vegetation statistics.</span>
+                        <span class="text-emerald-400 font-semibold" id="activeCountyDisplay">Active County: None</span>
+                    </div>
+                </div>
+
+                <!-- Database Performance Comparison -->
+                <div class="card rounded-xl p-4">
+                    <h2 class="text-lg font-bold text-white mb-3">SQL vs NoSQL Query Latency Benchmark</h2>
+                    <div class="h-64">
+                        <canvas id="benchmarkChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Chart Panels -->
+            <div class="lg:col-span-5 space-y-6">
+                
+                <!-- HBase NDVI Time Series -->
+                <div class="card rounded-xl p-4">
+                    <h2 class="text-lg font-bold text-white mb-1 flex items-center justify-between">
+                        <span>NDVI Vegetation Index Trend</span>
+                        <span class="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded">HBase Live Query</span>
+                    </h2>
+                    <p class="text-xs text-gray-500 mb-3">Fetches 20-year satellite measurements directly from HBase using key prefix scan.</p>
+                    <div class="h-64">
+                        <canvas id="ndviChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Real-Time Weather Streaming Observations -->
+                <div class="card rounded-xl p-4">
+                    <h2 class="text-lg font-bold text-white mb-1 flex items-center justify-between">
+                        <span>Real-Time Weather Stream</span>
+                        <span class="text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">Spark Streaming Live</span>
+                    </h2>
+                    <p class="text-xs text-gray-500 mb-3">Displays real-time daily weather records ingested via simulated Flume & Spark Streaming.</p>
+                    <div class="h-64 overflow-y-auto pr-1">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                                    <th class="py-2">Date</th>
+                                    <th class="py-2 text-right">Avg Temp</th>
+                                    <th class="py-2 text-right">Precipitation</th>
+                                    <th class="py-2 text-right">Records</th>
+                                </tr>
+                            </thead>
+                            <tbody id="weatherStreamTableBody" class="divide-y divide-gray-800 font-mono text-gray-300">
+                                <tr>
+                                    <td colspan="4" class="py-4 text-center text-gray-500">No live streaming weather data. Run Flume & Spark Streaming to ingest.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Actual vs Predicted Yields -->
+                <div class="card rounded-xl p-4">
+                    <h2 class="text-lg font-bold text-white mb-3">Model Accuracy: Actual vs. Predicted Yield</h2>
+                    <div class="h-64">
+                        <canvas id="yieldChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Feature Importance -->
+                <div class="card rounded-xl p-4">
+                    <h2 class="text-lg font-bold text-white mb-3">ML Model Feature Importance</h2>
+                    <div class="h-64">
+                        <canvas id="importanceChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Scripting for UI and Data Orchestration -->
+    <script>
+        // Global variables for dashboard state
+        let map;
+        let geojsonLayer;
+        let activeCountyId = 1; // Default: Iowa
+        let predictionsData = [];
+        let ndviChart, yieldChart, benchmarkChart, importanceChart;
+        
+        // Setup Map
+        function initMap() {
+            // Centered globally
+            map = L.map('map').setView([20.0, 0.0], 2.0);
+            
+            // Dark base layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+                maxZoom: 20
+            }).addTo(map);
+        }
+
+        // Fetch county geojson boundaries and add to map
+        async function loadMapData() {
+            try {
+                const response = await fetch('/api/geojson');
+                const geojson = await response.json();
+                
+                if (geojsonLayer) {
+                    map.removeLayer(geojsonLayer);
+                }
+                
+                geojsonLayer = L.geoJSON(geojson, {
+                    style: styleFeature,
+                    onEachFeature: function(feature, layer) {
+                        layer.on({
+                            click: onCountyClick,
+                            mouseover: function(e) {
+                                e.target.setStyle({ weight: 3, color: '#6366f1' });
+                            },
+                            mouseout: function(e) {
+                                geojsonLayer.resetStyle(e.target);
+                            }
+                        });
+                        
+                        // Label county name
+                        layer.bindTooltip(feature.properties.name, {
+                            permanent: false, 
+                            direction: 'center',
+                            className: 'bg-gray-900 border-none text-white text-xs px-2 py-1 rounded shadow-lg'
+                        });
+                    }
+                }).addTo(map);
+                
+                // Set default selected county style
+                highlightCountyOnMap(activeCountyId);
+                
+                // Automatically fit map bounds to the coordinates of target regions
+                if (geojson.features && geojson.features.length > 0) {
+                    map.fitBounds(geojsonLayer.getBounds(), { padding: [30, 30] });
+                }
+            } catch (err) {
+                console.error("Map loading error:", err);
+            }
+        }
+
+        function styleFeature(feature) {
+            const isSelected = feature.properties.county_id === activeCountyId;
+            return {
+                fillColor: '#4f46e5',
+                weight: isSelected ? 3 : 1.5,
+                opacity: 1,
+                color: isSelected ? '#a78bfa' : '#374151',
+                fillOpacity: isSelected ? 0.45 : 0.2
+            };
+        }
+
+        function highlightCountyOnMap(countyId) {
+            if (!geojsonLayer) return;
+            geojsonLayer.eachLayer(layer => {
+                if (layer.feature.properties.county_id === countyId) {
+                    layer.setStyle({ weight: 3.5, color: '#a78bfa', fillOpacity: 0.5 });
+                    document.getElementById("activeCountyDisplay").innerText = `Active County: ${layer.feature.properties.name}`;
+                } else {
+                    layer.setStyle({ weight: 1.5, color: '#374151', fillOpacity: 0.2 });
+                }
+            });
+        }
+
+        function onCountyClick(e) {
+            const layer = e.target;
+            const countyId = layer.feature.properties.county_id;
+            activeCountyId = countyId;
+            highlightCountyOnMap(countyId);
+            
+            // Reload NDVI time series, weather data and Yield accuracy charts
+            loadNDVILiveData(countyId);
+            loadWeatherLiveData(countyId);
+            updateYieldChart();
+        }
+
+        // Fetch Live HBase NDVI
+        async function loadNDVILiveData(countyId) {
+            try {
+                const response = await fetch(`/api/ndvi/${countyId}`);
+                const res = await response.json();
+                
+                const dates = res.data.map(item => item.date);
+                const ndvis = res.data.map(item => item.ndvi);
+                
+                // Show sample of dates on chart
+                updateNDVIChart(dates, ndvis);
+            } catch (err) {
+                console.error("HBase fetch error:", err);
+            }
+        }
+
+        // Fetch Live HBase Weather Stream
+        async function loadWeatherLiveData(countyId) {
+            try {
+                const response = await fetch(`/api/weather/${countyId}`);
+                const res = await response.json();
+                
+                const tbody = document.getElementById("weatherStreamTableBody");
+                tbody.innerHTML = "";
+                
+                if (!res.data || res.data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-gray-500">No live streaming weather data. Run Flume & Spark Streaming to ingest.</td></tr>`;
+                    return;
+                }
+                
+                // Sort by date descending to show latest records first
+                const sortedData = [...res.data].sort((a, b) => b.date.localeCompare(a.date));
+                
+                sortedData.forEach(row => {
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-gray-800/50";
+                    tr.innerHTML = `
+                        <td class="py-2 font-semibold text-gray-400">${row.date}</td>
+                        <td class="py-2 text-right text-orange-400">${row.avg_temp.toFixed(2)} °C</td>
+                        <td class="py-2 text-right text-blue-400">${row.total_precip.toFixed(2)} mm</td>
+                        <td class="py-2 text-right text-gray-500">${row.record_count}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error("HBase weather fetch error:", err);
+            }
+        }
+
+        // Initialize and Update Charts
+        function updateNDVIChart(labels, values) {
+            if (ndviChart) {
+                ndviChart.destroy();
+            }
+            
+            const ctx = document.getElementById('ndviChart').getContext('2d');
+            ndviChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'MODIS Mean NDVI',
+                        data: values,
+                        borderColor: '#22d3ee',
+                        backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { maxTicksLimit: 8, color: '#9ca3af' }
+                        },
+                        y: {
+                            min: 0.3,
+                            max: 1.0,
+                            ticks: { color: '#9ca3af' },
+                            grid: { color: '#1f2937' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function updateYieldChart() {
+            const crop = document.getElementById("cropSelect").value;
+            
+            // Filter predictions by active county and crop
+            const countyData = predictionsData.filter(d => d.county_id === activeCountyId && d.crop === crop);
+            const years = countyData.map(d => d.year);
+            const actuals = countyData.map(d => d.actual_yield);
+            const predicteds = countyData.map(d => d.predicted_yield);
+            
+            if (yieldChart) {
+                yieldChart.destroy();
+            }
+            
+            const ctx = document.getElementById('yieldChart').getContext('2d');
+            yieldChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: years,
+                    datasets: [
+                        {
+                            label: 'Actual Yield (MT/Ha)',
+                            data: actuals,
+                            backgroundColor: '#4f46e5',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'Predicted Yield (MT/Ha)',
+                            data: predicteds,
+                            backgroundColor: '#a78bfa',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { display: false } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#f3f4f6' }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadPredictions() {
+            try {
+                const response = await fetch('/api/predictions');
+                predictionsData = await response.json();
+                
+                // Populate Year Select Box
+                const years = [...new Set(predictionsData.map(d => d.year))].sort();
+                const yearSelect = document.getElementById("yearSelect");
+                yearSelect.innerHTML = "";
+                years.forEach(yr => {
+                    const opt = document.createElement("option");
+                    opt.value = yr;
+                    opt.innerText = yr;
+                    yearSelect.appendChild(opt);
+                });
+                if (years.length > 0) {
+                    yearSelect.value = years[years.length - 1]; // Default to latest year
+                }
+                
+                updateYieldChart();
+            } catch (err) {
+                console.error("Predictions fetch error:", err);
+            }
+        }
+
+        async function loadBenchmarks() {
+            try {
+                const response = await fetch('/api/benchmarks');
+                const benchmarks = await response.json();
+                
+                const labels = benchmarks.map(b => b.system);
+                const latencies = benchmarks.map(b => b.latency_ms);
+                
+                const ctx = document.getElementById('benchmarkChart').getContext('2d');
+                benchmarkChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Query Latency (ms) - Log Scale',
+                            data: latencies,
+                            backgroundColor: ['#22d3ee', '#818cf8', '#ef4444'],
+                            borderWidth: 0,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: {
+                            x: {
+                                type: 'logarithmic',
+                                min: 0.1,
+                                ticks: {
+                                    color: '#9ca3af',
+                                    callback: function(value) {
+                                        return value + "ms";
+                                    }
+                                },
+                                grid: { color: '#1f2937' }
+                            },
+                            y: { ticks: { color: '#9ca3af' }, grid: { display: false } }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Benchmark fetch error:", err);
+            }
+        }
+
+        async function loadFeatureImportance() {
+            try {
+                const response = await fetch('/api/feature-importance');
+                const features = await response.json();
+                
+                // Find R2 and update the KPI card dynamically if present
+                const r2Record = features.find(f => f.feature === '_model_r2');
+                if (r2Record) {
+                    document.getElementById('model-r2-val').innerText = `R² = ${r2Record.importance.toFixed(4)}`;
+                }
+                
+                // Filter out model evaluation metrics from chart
+                const filteredFeatures = features.filter(f => !f.feature.startsWith('_model_'));
+                
+                filteredFeatures.sort((a, b) => b.importance - a.importance);
+                const labels = filteredFeatures.map(f => f.feature);
+                const importances = filteredFeatures.map(f => f.importance);
+                
+                const ctx = document.getElementById('importanceChart').getContext('2d');
+                importanceChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: importances,
+                            backgroundColor: '#10b981',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        scales: {
+                            x: { ticks: { color: '#9ca3af' }, grid: { color: '#1f2937' } },
+                            y: { ticks: { color: '#9ca3af' }, grid: { display: false } }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Feature importance fetch error:", err);
+            }
+        }
+
+        // Event listeners
+        document.getElementById("cropSelect").addEventListener("change", updateYieldChart);
+        document.getElementById("yearSelect").addEventListener("change", updateYieldChart);
+
+        let weatherTimer;
+        // Set up polling for streaming weather updates
+        function startWeatherPolling() {
+            if (weatherTimer) clearInterval(weatherTimer);
+            weatherTimer = setInterval(() => {
+                loadWeatherLiveData(activeCountyId);
+            }, 5000);
+        }
+
+        // Bootstrap dashboard
+        window.addEventListener("DOMContentLoaded", async () => {
+            initMap();
+            await loadMapData();
+            await loadPredictions();
+            await loadNDVILiveData(activeCountyId);
+            await loadWeatherLiveData(activeCountyId);
+            await loadBenchmarks();
+            await loadFeatureImportance();
+            startWeatherPolling();
+        });
+    </script>
+</body>
+</html>
