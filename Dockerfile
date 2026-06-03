@@ -22,7 +22,8 @@ WORKDIR /app
 
 # Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir --timeout=120 --retries=10 -r requirements.txt
 
 # Copy spark default configs for Java compatibility
 COPY spark-defaults.conf /usr/local/lib/python3.10/site-packages/pyspark/conf/spark-defaults.conf
