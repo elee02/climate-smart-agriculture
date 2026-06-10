@@ -293,7 +293,7 @@
             const isSelected = feature.properties.county_id === activeCountyId;
             const crop = document.getElementById("cropSelect").value;
             const yearSelect = document.getElementById("yearSelect");
-            const year = yearSelect && yearSelect.value ? yearSelect.value : "2026";
+            const year = yearSelect && yearSelect.value ? yearSelect.value : "2019";
             
             const countyYield = getCountyYield(feature.properties.county_id, crop, year);
             const { min, max } = getYieldRange(crop, year);

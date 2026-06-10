@@ -27,8 +27,8 @@ if [ -f "data/raw/fao/fao_crop_production.csv" ] && [ -d "data/raw/gadm" ]; then
 else
     echo -e "${YELLOW}Downloading real-world datasets (FAOSTAT, NOAA, GADM)...${NC}"
     echo "Note: MODIS GeoTIFF files can be downloaded using download_modis_real.py (requires NASA Earthdata Login)."
-    python3 download_data.py --source fao --years 2015 2026 || echo -e "${RED}FAO download failed, will use fallback data.${NC}"
-    python3 download_data.py --source noaa --years 2015 2026 || echo -e "${RED}NOAA download failed, will use fallback data.${NC}"
+    python3 download_data.py --source fao --years 2015 2019 || echo -e "${RED}FAO download failed, will use fallback data.${NC}"
+    python3 download_data.py --source noaa --years 2015 2019 || echo -e "${RED}NOAA download failed, will use fallback data.${NC}"
     python3 download_data.py --source gadm || echo -e "${RED}GADM download failed, will use fallback boundaries.${NC}"
 fi
 

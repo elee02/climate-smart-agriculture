@@ -506,9 +506,9 @@ def main():
         "--years",
         nargs=2,
         type=int,
-        default=[2015, 2026],
+        default=[2015, 2019],
         metavar=("START", "END"),
-        help="Year range to download (default: 2015 2026)",
+        help="Year range to download (default: 2015 2019)",
     )
     args = parser.parse_args()
 

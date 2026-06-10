@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--password", help="NASA Earthdata password")
     parser.add_argument("--token", help="NASA Earthdata token (Generate Token on EarthData page)")
     parser.add_argument("--year", type=int, help="Single target year to download")
-    parser.add_argument("--years", nargs=2, type=int, default=[2015, 2026], metavar=("START", "END"), help="Target years range to download (default: 2015 2026)")
+    parser.add_argument("--years", nargs=2, type=int, default=[2015, 2019], metavar=("START", "END"), help="Target years range to download (default: 2015 2019)")
     args = parser.parse_args()
 
     os.makedirs(MODIS_DIR, exist_ok=True)

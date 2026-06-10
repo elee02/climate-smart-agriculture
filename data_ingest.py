@@ -369,7 +369,7 @@ def _generate_fao_fallback(pg_conn, regions):
     for iso3, region_map in TARGET_REGIONS.items():
         baselines = BASELINES.get(iso3, {})
         for cid in region_map.keys():
-            for year in range(2015, 2027):
+            for year in range(2015, 2020):
                 climate_trend = -0.008 * (year - 2015)
                 for crop, base_yield in baselines.items():
                     var = random.normalvariate(0, base_yield * 0.08)
@@ -502,7 +502,7 @@ def _generate_weather_fallback(regions):
         base_temp = normals["temp"]
         base_rain = normals["rain"]
 
-        dates = pd.date_range(start="2015-01-01", end="2026-12-31", freq="D")
+        dates = pd.date_range(start="2015-01-01", end="2019-12-31", freq="D")
         for dt in dates:
             doy = dt.dayofyear
             temp_season = 12.0 * np.sin(2 * np.pi * (doy - 110) / 365.0)

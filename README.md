@@ -76,7 +76,7 @@ All data is sourced from openly available repositories:
 
 | Dataset | Format | Source | Coverage |
 |---------|--------|--------|----------|
-| Crop production statistics (yield, area, production) | Structured CSV | [FAOSTAT](https://www.fao.org/faostat/) | 5 countries, 4 crops, 2015–2026 |
+| Crop production statistics (yield, area, production) | Structured CSV | [FAOSTAT](https://www.fao.org/faostat/) | 5 countries, 4 crops, 2015–2019 |
 | Daily weather observations (temp, precip) | Semi-structured CSV | [NOAA GSOD](https://www.ncei.noaa.gov/access/search/data-search/global-summary-of-the-day) via [AWS S3](https://noaa-gsod-pds.s3.amazonaws.com/) | 50 stations across 5 countries |
 | Satellite vegetation index (NDVI) | Unstructured raster (GeoTIFF/HDF) | [NASA MODIS MOD13Q1](https://lpdaac.usgs.gov/products/mod13q1v061/) | 250m, 16-day composites |
 | Administrative boundaries | Shapefile / GeoJSON | [GADM v4.1](https://gadm.org/data.html) | Admin level 1, 5 countries |
@@ -122,17 +122,17 @@ Five storage systems were used within one unified architecture, each chosen for 
 Tools to download real data from all four sources:
 
 ```bash
-python download_data.py --source all --years 2015 2026
+python download_data.py --source all --years 2015 2019
 python download_data.py --source fao          # Just FAO crop data
 python download_data.py --source noaa         # Just NOAA weather
 python download_data.py --source gadm         # Just GADM boundaries
 
 # For MODIS data, use the dedicated earthaccess downloader:
 # Using username and password:
-python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2026
+python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2019
 
 # Alternatively, using an Earthdata Login token:
-python download_modis_real.py --token YOUR_TOKEN --years 2015 2026
+python download_modis_real.py --token YOUR_TOKEN --years 2015 2019
 ```
 
 - **FAOSTAT:** Bulk CSV download from FAO's public server, filtered for target countries and crops.
@@ -146,7 +146,7 @@ Loads downloaded data into the polyglot database layer:
 - GADM shapefiles → PostGIS (real geometries) + MongoDB (GeoJSON)
 - FAOSTAT CSV → PostgreSQL `crop_yields` table (fully matches Soybean statistics by mapping "soy beans" variants, distributed to 25 regions with regional variance)
 - NOAA weather → consolidated CSV mapped to nearest agricultural region
-- MODIS GeoTIFF → hybrid zonal NDVI statistics via rasterio + rasterstats. It processes available GeoTIFF tiles, automatically falls back to phenology-based NDVI records for missing regions/years (2015-2026), and caches calculated zonal stats in `data/processed_tiles_cache.json` to optimize subsequent runs.
+- MODIS GeoTIFF → hybrid zonal NDVI statistics via rasterio + rasterstats. It processes available GeoTIFF tiles, automatically falls back to phenology-based NDVI records for missing regions/years (2015-2019), and caches calculated zonal stats in `data/processed_tiles_cache.json` to optimize subsequent runs.
 
 ### PostgreSQL → HDFS Export (`sqoop_ingest.py`)
 
@@ -321,13 +321,13 @@ cd climate-smart-agriculture
 
 # 2. Download real-world data (runs on host)
 pip install requests pandas numpy geopandas shapely
-python download_data.py --source all --years 2015 2026
+python download_data.py --source all --years 2015 2019
 
 # 3. Download MODIS data via earthaccess (requires NASA Earthdata account)
 # Using username and password:
-python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2026
+python download_modis_real.py --username YOUR_USERNAME --password YOUR_PASSWORD --years 2015 2019
 # Or using Earthdata Login token:
-python download_modis_real.py --token YOUR_TOKEN --years 2015 2026
+python download_modis_real.py --token YOUR_TOKEN --years 2015 2019
 
 # 4. Run the full pipeline (Docker)
 chmod +x run_all.sh
