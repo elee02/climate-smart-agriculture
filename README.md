@@ -191,10 +191,14 @@ Monitors the HDFS streaming directory for new weather observations (produced by 
 - Uses HDFS-based checkpointing for fault tolerance
 
 ### Persistent Background Streaming Pipeline
-After the initial ETL completes, `run_all.sh` spins up both the **Flume Agent** and **Spark Structured Streaming** to run continuously in the background inside the container:
-- The streaming pipeline continues to fetch live weather data and update HBase.
+
+The streaming pipeline is **fully automated** — both the Flume Agent and Spark Structured Streaming start automatically when the container boots via the `entrypoint.sh` script, without requiring manual intervention or `run_all.sh`:
+
+- **Automatic Startup:** On container boot, `entrypoint.sh` waits for HBase Thrift and HDFS NameNode connectivity, then checks the HDFS NameNode JMX endpoint to confirm SafeMode has been exited before creating streaming directories and launching background processes.
+- **Deduplication:** Both `entrypoint.sh` and `run_all.sh` check `/proc` for existing process cmdlines before spawning, preventing duplicate Flume or Spark Streaming instances.
+- **Standalone Spark Cluster:** Background streaming submits to the Spark standalone master (`spark://spark:7077`), making all jobs visible in the Spark Master Web UI at `http://localhost:8080`.
+- **Persistent HBase Data:** HBase data is stored on a named Docker volume mounted at `/hbase-data`, so all NDVI time-series and weather stream tables persist across `docker-compose down` / `docker-compose up -d` cycles.
 - Log outputs are routed to `data/flume_agent.log` and `data/spark_streaming.log` on the host for real-time monitoring.
-- The processes run indefinitely until all containers are stopped via `docker-compose down`.
 
 ---
 
@@ -223,9 +227,18 @@ A Random Forest model was trained using Spark MLlib to predict crop yield (mt/ha
 
 This produces 9 combinations × 5 folds = **45 models trained in parallel** across the Spark cluster. The best model and all fold metrics are logged to MongoDB.
 
+### Smart Training Skip Logic
+
+Before initializing a Spark session, `ml_model.py` performs a lightweight pre-flight check:
+1. Queries PostgreSQL for row counts and checksums of `yield_features` and `crop_yields` tables to compute a **data signature**.
+2. Compares against the previously stored signature in MongoDB's `model_metadata` collection.
+3. If the signature matches and predictions/CV results already exist, training and cross-validation are **skipped entirely** — completing in under 10 seconds instead of several minutes.
+
 ---
 
 ## Performance Benchmarks (`benchmark.py`)
+
+All three benchmark categories are displayed on the web dashboard via a **tabbed interface** (Query Latency · Scaling Analysis · ORC vs CSV), with data fetched from MongoDB via dedicated API endpoints.
 
 ### SQL vs NoSQL Comparison
 
@@ -241,7 +254,7 @@ HBase excels at point lookups, while Hive/Spark SQL is optimized for batch aggre
 
 ### Scaling Analysis
 
-Measured aggregation execution time over increasing data fractions (10%, 25%, 50%, 75%, 100%) to demonstrate sub-linear scaling behavior of distributed Spark processing.
+Measured aggregation execution time over increasing data fractions (10%, 25%, 50%, 75%, 100%) to demonstrate sub-linear scaling behavior of distributed Spark processing. Rendered as an interactive Chart.js line chart on the dashboard.
 
 ### ORC vs CSV Format Comparison
 
@@ -249,7 +262,7 @@ Compared identical aggregation queries on:
 - Hive ORC tables (columnar, compressed, predicate pushdown)
 - Raw CSV files on HDFS (row-oriented, uncompressed)
 
-ORC consistently outperforms CSV for analytical workloads due to columnar storage and statistics-based predicate pushdown.
+ORC consistently outperforms CSV for analytical workloads due to columnar storage and statistics-based predicate pushdown. Displayed on the dashboard as a side-by-side latency comparison with computed speedup factor.
 
 ---
 
@@ -260,10 +273,12 @@ climate-smart-agriculture/
 ├── README.md                 # This file
 ├── LICENSE                   # MIT License
 ├── Dockerfile                # Python 3.10 + Java 21 + GDAL + PySpark
-├── docker-compose.yml        # 7 services: Postgres, MongoDB, HBase, HDFS, Spark, App
+├── docker-compose.yml        # 8 services: Postgres, MongoDB, HBase, HDFS, Spark Master/Worker, App
+├── entrypoint.sh             # Container boot script: waits for HDFS SafeMode, starts streaming
 ├── hadoop.env                # Hadoop configuration environment variables
 ├── spark-defaults.conf       # Spark Java module access configuration
 ├── requirements.txt          # Python dependencies (17 packages)
+├── demo_video_guide.md       # Step-by-step video demo recording guide with voiceover script
 │
 ├── download_data.py          # [Phase 1] Real data download from FAO, NOAA, GADM
 ├── download_modis_real.py    # [Phase 1] Automated NASA MODIS Real Data Downloader via earthaccess
@@ -272,14 +287,14 @@ climate-smart-agriculture/
 ├── pipeline.py               # [Phase 4] PySpark ETL: zonal stats, cleaning, features
 ├── flume_agent.py            # [Phase 5] Flume-style ingestion agent (live Open-Meteo API data)
 ├── spark_streaming.py        # [Phase 6] Spark Structured Streaming job
-├── ml_model.py               # [Phase 7] Spark MLlib Random Forest + cross-validation
+├── ml_model.py               # [Phase 7] Spark MLlib Random Forest + cross-validation + skip logic
 ├── benchmark.py              # [Phase 8] Performance benchmarks (HBase vs SQL vs Hive)
 ├── run_all.sh                # End-to-end pipeline orchestration script
 │
 ├── app/
-│   ├── main.py               # Flask web dashboard (8 API endpoints)
+│   ├── main.py               # Flask web dashboard (10 API endpoints)
 │   └── templates/
-│       └── index.html        # Dashboard frontend (maps, charts, tables)
+│       └── index.html        # Dashboard frontend (maps, charts, tabbed benchmarks)
 │
 └── data/
     ├── raw/                  # Downloaded real-world data
@@ -301,11 +316,12 @@ climate-smart-agriculture/
 |---------|-------|-------|---------|
 | `postgres` | postgis/postgis:15-3.3-alpine | 5432 | RDBMS + spatial data |
 | `mongodb` | mongo:6.0 | 27017 | Document store + GeoJSON |
-| `hbase` | harisekhon/hbase:1.4 | 16010, 9090, 2181 | NoSQL + Thrift API |
+| `hbase` | harisekhon/hbase:1.4 | 16010, 9090, 2181 | NoSQL + Thrift API (persistent volume at `/hbase-data`) |
 | `namenode` | bde2020/hadoop-namenode | 9870, 9000 | HDFS NameNode |
 | `datanode` | bde2020/hadoop-datanode | 9864 | HDFS DataNode |
-| `spark` | apache/spark:3.5.0 | 8080, 7077 | Spark Master |
-| `app` | custom (Dockerfile) | 5000 | Pipeline runner + Flask dashboard |
+| `spark` | apache/spark:3.5.0 | 8080, 7077 | Spark standalone Master |
+| `spark-worker` | apache/spark:3.5.0 | — | Spark standalone Worker (registers with Master) |
+| `app` | custom (Dockerfile) | 5000 | Pipeline runner + Flask dashboard + auto-streaming |
 
 ---
 
@@ -379,3 +395,8 @@ After pipeline completion:
 | Data skew across countries | Custom region-balanced partitioning in Spark |
 | MODIS NoData values and scale factors | Handled -3000 fill values, applied ÷10000 scaling in GeoTIFF processing |
 | Real-time ingestion without full Flume/Kafka | Implemented Flume Source-Channel-Sink pattern with live Open-Meteo API data and HDFS persistence |
+| HBase data lost on container restart | Corrected volume mount to `/hbase-data` (where `harisekhon/hbase:1.4` actually stores data) |
+| HDFS SafeMode blocks streaming startup | Added JMX-based SafeMode polling in `entrypoint.sh` before creating directories or launching Spark |
+| Spark Master UI showing no jobs | Configured standalone cluster (Master + Worker) and switched all `spark-submit` from `local[*]` to `spark://spark:7077` |
+| Redundant ML training on unchanged data | Pre-flight PostgreSQL checksum + MongoDB signature comparison skips training when inputs haven't changed |
+| Duplicate streaming processes on restart | `/proc` cmdline scanning in both `entrypoint.sh` and `run_all.sh` prevents spawning duplicates |
