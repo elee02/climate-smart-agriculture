@@ -120,7 +120,7 @@ docker-compose exec -T app python sqoop_ingest.py import \
 echo -e "\n${YELLOW}[Step 5/9] Submitting PySpark ETL Job (Zonal Stats, HBase write, Hive ORC weather)...${NC}"
 docker-compose exec -T app spark-submit \
   --packages org.postgresql:postgresql:42.6.0 \
-  --master local[*] \
+  --master spark://spark:7077 \
   pipeline.py
 
 # ──────────────────────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ docker-compose exec -T app python flume_agent.py --mode demo --duration 30 --rat
 # ──────────────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[Step 7/9] Running Spark Structured Streaming Demo (60 seconds)...${NC}"
 docker-compose exec -T app spark-submit \
-  --master local[*] \
+  --master spark://spark:7077 \
   spark_streaming.py --duration 60 --trigger-interval 15
 
 # ──────────────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ if [ "$SKIP_TRAIN" = false ]; then
     echo -e "${YELLOW}Submitting Spark MLlib Job (Random Forest + 5-Fold Cross-Validation)...${NC}"
     docker-compose exec -T app spark-submit \
       --packages org.postgresql:postgresql:42.6.0 \
-      --master local[*] \
+      --master spark://spark:7077 \
       ml_model.py
     if [ -n "$INPUTS_HASH" ]; then
         echo "$INPUTS_HASH" > data/.model_hash
@@ -210,7 +210,7 @@ fi
 if check_running_in_container "spark_streaming.py"; then
     echo -e "${GREEN}Spark Structured Streaming is already running in the background.${NC}"
 else
-    docker-compose exec -d app sh -c "spark-submit --master local[*] spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1"
+    docker-compose exec -d app sh -c "spark-submit --master spark://spark:7077 spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1"
     echo -e "${GREEN}Started background Spark Structured Streaming.${NC}"
 fi
 

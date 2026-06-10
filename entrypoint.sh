@@ -59,7 +59,7 @@ fi
 # Start background Spark structured streaming if not already running
 if ! check_process "spark_streaming.py"; then
     echo "Starting background Spark Structured Streaming..."
-    spark-submit --master local[*] spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1 &
+    spark-submit --master spark://spark:7077 spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1 &
 else
     echo "Spark Structured Streaming is already running."
 fi
