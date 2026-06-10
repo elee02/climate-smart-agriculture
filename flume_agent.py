@@ -362,7 +362,7 @@ def main():
                         help="Operating mode: producer (generate files), agent (ingest to HDFS), demo (both)")
     parser.add_argument("--watch-dir", default=WATCH_DIR, help="Directory to watch for new files")
     parser.add_argument("--hdfs-dir", default=HDFS_TARGET, help="HDFS target directory")
-    parser.add_argument("--rate", type=int, default=60, help="Seconds between produced files (producer mode)")
+    parser.add_argument("--rate", type=int, default=1800, help="Seconds between produced files (producer mode)")
     parser.add_argument("--duration", type=int, default=300, help="Duration in seconds")
     args = parser.parse_args()
 
