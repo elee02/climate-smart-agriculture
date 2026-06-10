@@ -37,6 +37,13 @@ until python3 -c "import socket; s = socket.socket(); s.settimeout(1); s.connect
 done
 echo "HDFS NameNode is ready!"
 
+# Wait for HDFS to exit SafeMode
+echo "Waiting for HDFS to exit SafeMode..."
+until python3 -c "import urllib.request, json, sys; res = json.loads(urllib.request.urlopen('http://namenode:9870/jmx?qry=Hadoop:service=NameNode,name=NameNodeInfo').read().decode('utf-8')); sys.exit(0 if res['beans'][0]['Safemode'] == '' else 1)" 2>/dev/null; do
+    sleep 2
+done
+echo "HDFS is out of SafeMode!"
+
 # Ensure HDFS directories for streaming exist
 curl -s -X PUT "http://namenode:9870/webhdfs/v1/data/streaming/weather_incoming?op=MKDIRS" >/dev/null || true
 curl -s -X PUT "http://namenode:9870/webhdfs/v1/data/streaming/checkpoints/weather_stream?op=MKDIRS" >/dev/null || true
