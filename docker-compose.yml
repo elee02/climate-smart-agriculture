@@ -71,7 +71,12 @@ services:
   spark:
     image: apache/spark:3.5.0
     container_name: spark
-    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    user: root
+    command: >
+      sh -c "
+      pip install --no-cache-dir happybase thrift &&
+      /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+      "
     environment:
       - SPARK_MODE=master
       - SPARK_RPC_AUTHENTICATION_ENABLED=no
@@ -90,7 +95,12 @@ services:
   spark-worker:
     image: apache/spark:3.5.0
     container_name: spark-worker
-    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark:7077"]
+    user: root
+    command: >
+      sh -c "
+      pip install --no-cache-dir happybase thrift &&
+      /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark:7077
+      "
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark:7077

@@ -53,7 +53,7 @@ def init_spark():
     print("--- Initializing PySpark Session with Hive Support ---")
     spark = SparkSession.builder \
         .appName("ClimateSmartAgriculture-ETL") \
-        .config("spark.sql.warehouse.dir", "/user/hive/warehouse") \
+        .config("spark.sql.warehouse.dir", f"{HDFS_NAMENODE}/user/hive/warehouse") \
         .config("spark.sql.catalogImplementation", "hive") \
         .config("spark.driver.extraJavaOptions",
                 "--add-opens=java.base/java.lang=ALL-UNNAMED "
@@ -389,9 +389,11 @@ def run_pipeline(spark):
 
     # Write to Hive warehouse as ORC table (batch analytics store)
     print("Writing cleaned weather indices to Hive as ORC table...")
+    spark.sql("DROP TABLE IF EXISTS weather_indices")
     weather_indices.write \
         .format("orc") \
         .mode("overwrite") \
+        .option("path", f"{HDFS_NAMENODE}/user/hive/warehouse/weather_indices") \
         .saveAsTable("weather_indices")
     print("Hive ORC table 'weather_indices' written successfully.")
 

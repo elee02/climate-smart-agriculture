@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.8-slim-bookworm
 
 # Install system dependencies:
 #   - Java 21 for PySpark
@@ -6,7 +6,7 @@ FROM python:3.10-slim
 #   - gcc/g++ for native compilations
 #   - libpq-dev for psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-21-jre-headless \
+    openjdk-17-jre-headless \
     gcc \
     g++ \
     libpq-dev \
@@ -26,7 +26,7 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir --timeout=120 --retries=10 -r requirements.txt
 
 # Copy spark default configs for Java compatibility
-COPY spark-defaults.conf /usr/local/lib/python3.10/site-packages/pyspark/conf/spark-defaults.conf
+COPY spark-defaults.conf /usr/local/lib/python3.8/site-packages/pyspark/conf/spark-defaults.conf
 
 # Create project directories
 RUN mkdir -p data/raw/fao data/raw/noaa data/raw/modis data/raw/gadm data/processed app/templates app/static
