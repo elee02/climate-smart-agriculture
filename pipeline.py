@@ -363,14 +363,14 @@ def run_pipeline(spark):
     resampled_weather = cleaned_weather \
         .withColumn("date_parsed",
                     F.to_date(F.col("date"), "yyyy-MM-dd")) \
-        .withColumn("days_since_start",
-                    F.datediff(F.col("date_parsed"),
-                               F.to_date(F.lit("2015-01-01")))) \
+        .withColumn("year_start",
+                    F.trunc(F.col("date_parsed"), "year")) \
+        .withColumn("days_since_year_start",
+                    F.datediff(F.col("date_parsed"), F.col("year_start"))) \
         .withColumn("interval_id",
-                    F.floor(F.col("days_since_start") / 16)) \
+                    F.floor(F.col("days_since_year_start") / 16)) \
         .withColumn("resample_date",
-                    F.date_add(F.to_date(F.lit("2015-01-01")),
-                               (F.col("interval_id") * 16).cast("int")))
+                    F.expr("date_add(year_start, cast(interval_id * 16 as int))"))
 
     # Aggregate: seasonal climate indices per 16-day window
     weather_indices = resampled_weather.groupBy("county_id", "resample_date") \

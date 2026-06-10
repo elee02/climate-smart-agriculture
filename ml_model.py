@@ -186,42 +186,48 @@ def main(use_cross_validation=True):
         print(f"Parameter grid: {len(paramGrid)} combinations × 5 folds = {len(paramGrid) * 5} models")
         print("Training with distributed cross-validation (this may take a few minutes)...")
 
-        cv_model = crossval.fit(train_set)
-        best_model = cv_model.bestModel
-
-        # Log cross-validation results
-        avg_metrics = cv_model.avgMetrics
-        print(f"\nCross-validation results ({len(avg_metrics)} parameter combinations):")
-        for i, (params, metric) in enumerate(zip(paramGrid, avg_metrics)):
-            nt = params[rf.numTrees]
-            md = params[rf.maxDepth]
-            print(f"  [{i+1}] numTrees={nt}, maxDepth={md} → avg RMSE: {metric:.4f}")
-
-        best_idx = avg_metrics.index(min(avg_metrics))
-        best_params = paramGrid[best_idx]
-        print(f"\n✓ Best model: numTrees={best_params[rf.numTrees]}, maxDepth={best_params[rf.maxDepth]}")
-        print(f"  Best avg RMSE: {min(avg_metrics):.4f}")
-
-        rf_model = best_model
-
-        # Save CV results to MongoDB
-        cv_results = []
-        for i, (params, metric) in enumerate(zip(paramGrid, avg_metrics)):
-            cv_results.append({
-                "numTrees": int(params[rf.numTrees]),
-                "maxDepth": int(params[rf.maxDepth]),
-                "avg_rmse": float(metric),
-                "is_best": (i == best_idx),
-            })
-
         try:
-            mongo_client = MongoClient(MONGO_URI)
-            mongo_db = mongo_client["crop_dashboard"]
-            mongo_db["cv_results"].drop()
-            mongo_db["cv_results"].insert_many(cv_results)
-            print("Cross-validation results saved to MongoDB.")
-        except Exception as e:
-            print(f"Failed to save CV results to MongoDB: {e}")
+            cv_model = crossval.fit(train_set)
+            best_model = cv_model.bestModel
+
+            # Log cross-validation results
+            avg_metrics = cv_model.avgMetrics
+            print(f"\nCross-validation results ({len(avg_metrics)} parameter combinations):")
+            for i, (params, metric) in enumerate(zip(paramGrid, avg_metrics)):
+                nt = params[rf.numTrees]
+                md = params[rf.maxDepth]
+                print(f"  [{i+1}] numTrees={nt}, maxDepth={md} → avg RMSE: {metric:.4f}")
+
+            best_idx = avg_metrics.index(min(avg_metrics))
+            best_params = paramGrid[best_idx]
+            print(f"\n✓ Best model: numTrees={best_params[rf.numTrees]}, maxDepth={best_params[rf.maxDepth]}")
+            print(f"  Best avg RMSE: {min(avg_metrics):.4f}")
+
+            rf_model = best_model
+
+            # Save CV results to MongoDB
+            cv_results = []
+            for i, (params, metric) in enumerate(zip(paramGrid, avg_metrics)):
+                cv_results.append({
+                    "numTrees": int(params[rf.numTrees]),
+                    "maxDepth": int(params[rf.maxDepth]),
+                    "avg_rmse": float(metric),
+                    "is_best": (i == best_idx),
+                })
+
+            try:
+                mongo_client = MongoClient(MONGO_URI)
+                mongo_db = mongo_client["crop_dashboard"]
+                mongo_db["cv_results"].drop()
+                mongo_db["cv_results"].insert_many(cv_results)
+                print("Cross-validation results saved to MongoDB.")
+            except Exception as e:
+                print(f"Failed to save CV results to MongoDB: {e}")
+        except Exception as cv_error:
+            print(f"\n⚠ Cross-validation failed: {cv_error}")
+            print("  This usually happens when there is insufficient historical data (e.g. only 1-2 years of tiles).")
+            print("  Falling back to training Random Forest model directly on the training set.")
+            rf_model = rf.fit(train_set)
 
     else:
         print("\n=== Simple Train/Test Split (--no-cv mode) ===")

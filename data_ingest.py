@@ -52,22 +52,10 @@ NOAA_DIR = os.path.join(RAW_DIR, "noaa")
 MODIS_DIR = os.path.join(RAW_DIR, "modis")
 GADM_DIR = os.path.join(RAW_DIR, "gadm")
 
-# 25 target agricultural regions (5 per country)
+# 5 target agricultural regions in the USA (for all-real data pipeline)
 TARGET_REGIONS = {
     "USA": {
         1: "Iowa", 2: "Illinois", 3: "Indiana", 4: "Nebraska", 5: "Kansas",
-    },
-    "IND": {
-        6: "Punjab", 7: "Madhya Pradesh", 8: "Maharashtra", 9: "Uttar Pradesh", 10: "Rajasthan",
-    },
-    "BRA": {
-        11: "Mato Grosso", 12: "Goiás", 13: "Paraná", 14: "São Paulo", 15: "Minas Gerais",
-    },
-    "CHN": {
-        16: "Henan", 17: "Shandong", 18: "Heilongjiang", 19: "Jiangsu", 20: "Anhui",
-    },
-    "KEN": {
-        21: "Uasin Gishu", 22: "Trans Nzoia", 23: "Nakuru", 24: "Nyandarua", 25: "Bungoma",
     },
 }
 
@@ -80,13 +68,9 @@ for country, regions in TARGET_REGIONS.items():
 # FAO area name mapping
 FAO_COUNTRY_NAMES = {
     "USA": ["United States of America", "United States"],
-    "IND": ["India"],
-    "BRA": ["Brazil"],
-    "CHN": ["China, mainland", "China"],
-    "KEN": ["Kenya"],
 }
 
-TARGET_CROPS = ["maize", "wheat", "rice", "soybean"]
+TARGET_CROPS = ["maize", "wheat", "soybean"]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -428,9 +412,9 @@ def prepare_weather_data(regions):
 
     consolidated_csv = os.path.join(NOAA_DIR, "noaa_weather_consolidated.csv")
     if not os.path.exists(consolidated_csv):
-        print(f"  ⚠ Consolidated weather file not found at {consolidated_csv}")
-        print("    Generating weather data from NOAA climate normals...")
-        _generate_weather_fallback(regions)
+        print(f"  ✗ ERROR: Consolidated weather file not found at {consolidated_csv}")
+        print("    Please run: python download_data.py --source noaa")
+        print("    No simulated fallback data will be generated.")
         return
 
     df = pd.read_csv(consolidated_csv)
@@ -550,67 +534,30 @@ def _generate_weather_fallback(regions):
 # ──────────────────────────────────────────────────────────────────────
 
 def prepare_satellite_data(regions):
-    """Process MODIS GeoTIFF files into zonal statistics CSV, and fill missing gaps with fallback."""
-    print("\n--- 5. Preparing Satellite NDVI Data ---")
+    """Process real MODIS GeoTIFF files into zonal statistics CSV. No fallback generation."""
+    print("\n--- 5. Preparing Satellite NDVI Data (Real Only) ---")
 
     geotiff_files = glob.glob(os.path.join(MODIS_DIR, "**/*.tif"), recursive=True)
 
-    real_records = []
-    if geotiff_files:
-        print(f"  Found {len(geotiff_files)} GeoTIFF files. Computing zonal statistics...")
-        real_records = _process_geotiff_files(geotiff_files, regions)
-    else:
-        print(f"  No GeoTIFF files found in {MODIS_DIR}")
+    if not geotiff_files:
+        print(f"  ✗ ERROR: No GeoTIFF files found in {MODIS_DIR}")
+        print("    Please download MODIS tiles using: python download_modis_real.py")
+        print("    No simulated fallback data will be generated.")
+        return
 
-    # Build set of existing (county_id, date) pairs from real data
-    existing_keys = set()
-    for r in real_records:
-        existing_keys.add((r["county_id"], r["date"]))
+    print(f"  Found {len(geotiff_files)} GeoTIFF files. Computing zonal statistics...")
+    real_records = _process_geotiff_files(geotiff_files, regions)
 
-    # Generate fallback records for any missing (county_id, date) combinations from 2015-2026
-    BASE_NDVI = {
-        "USA": 0.72, "IND": 0.55, "BRA": 0.68, "CHN": 0.62, "KEN": 0.45,
-    }
-
-    fallback_records = []
-    dates = pd.date_range(start="2015-01-01", end="2026-12-31", freq="16D")
-    
-    for region in regions:
-        cid = region["county_id"]
-        country = region["country"]
-        base_val = BASE_NDVI.get(country, 0.5)
-
-        for dt in dates:
-            date_str = dt.strftime("%Y-%m-%d")
-            if (cid, date_str) not in existing_keys:
-                doy = dt.dayofyear
-                seasonal = 0.20 * np.sin(2 * np.pi * (doy - 90) / 365.0)
-
-                # Generate 5x5 pixel grid
-                for px in range(5):
-                    for py in range(5):
-                        noise = 0.04 * (px + py) / 8.0 + random.normalvariate(0, 0.04)
-                        ndvi = max(-0.05, min(0.99, base_val + seasonal + noise))
-                        fallback_records.append({
-                            "county_id": cid,
-                            "date": date_str,
-                            "pixel_x": px,
-                            "pixel_y": py,
-                            "ndvi": round(ndvi, 4),
-                        })
-
-    combined_records = real_records + fallback_records
-    
-    if combined_records:
-        df = pd.DataFrame(combined_records)
+    if real_records:
+        df = pd.DataFrame(real_records)
         out_path = os.path.join(PROCESSED_DIR, "satellite_ndvi_pixels.csv")
         os.makedirs(PROCESSED_DIR, exist_ok=True)
         df.to_csv(out_path, index=False)
         import shutil
         shutil.copy(out_path, os.path.join(BASE_DATA_DIR, "satellite_ndvi_pixels.csv"))
-        print(f"  ✓ Saved {len(df):,} total NDVI records (Real: {len(real_records)}, Fallback: {len(fallback_records)}) -> {out_path}")
+        print(f"  ✓ Saved {len(df):,} real NDVI records -> {out_path}")
     else:
-        print("  ⚠ No NDVI records generated.")
+        print("  ⚠ No NDVI records could be extracted from the GeoTIFF files.")
 
 
 def _process_geotiff_files(geotiff_files, regions):
@@ -618,8 +565,9 @@ def _process_geotiff_files(geotiff_files, regions):
     try:
         import rasterio
         from rasterstats import zonal_stats
+        from shapely.geometry import box
     except ImportError:
-        print("  ⚠ rasterio/rasterstats not installed. Returning empty list.")
+        print("  ⚠ rasterio/rasterstats/shapely not installed. Returning empty list.")
         return []
 
     # Build a GeoDataFrame of region polygons for zonal stats
@@ -656,33 +604,33 @@ def _process_geotiff_files(geotiff_files, regions):
             with rasterio.open(tif_path) as src:
                 # Reproject zones to match raster CRS
                 zones = gdf.to_crs(src.crs)
-                affine = src.transform
-                ndvi_data = src.read(1).astype(float)
-
-                # MODIS NDVI scale factor: raw values are scaled by 10000
-                # Valid range: -2000 to 10000 → -0.2 to 1.0
-                nodata = src.nodata
-                if nodata is not None:
-                    ndvi_data[ndvi_data == nodata] = np.nan
-                ndvi_data = ndvi_data / 10000.0  # Scale to -0.2 .. 1.0
-
-                # Compute zonal statistics
-                stats = zonal_stats(
-                    zones, ndvi_data, affine=affine,
-                    stats=["mean", "max", "min"],
-                    nodata=np.nan,
-                )
+                
+                # Filter zones to only those intersecting the raster bounds
+                raster_bbox = box(*src.bounds)
+                intersecting_zones = zones[zones.intersects(raster_bbox)]
 
                 file_records = []
-                for j, stat in enumerate(stats):
-                    if stat.get("mean") is not None:
-                        file_records.append({
-                            "county_id": int(zones.iloc[j]["county_id"]),
-                            "date": date_str,
-                            "pixel_x": 0,
-                            "pixel_y": 0,
-                            "ndvi": round(stat["mean"], 4),
-                        })
+                if not intersecting_zones.empty:
+                    # Pass the tif_path directly for windowed reading, which is 10x faster
+                    stats = zonal_stats(
+                        intersecting_zones,
+                        tif_path,
+                        stats=["mean", "max", "min"],
+                        nodata=src.nodata,
+                    )
+
+                    for j, stat in enumerate(stats):
+                        if stat.get("mean") is not None:
+                            # MODIS NDVI scale factor: raw values are scaled by 10000
+                            # Valid range: -2000 to 10000 -> -0.2 to 1.0
+                            mean_scaled = stat["mean"] / 10000.0
+                            file_records.append({
+                                "county_id": int(intersecting_zones.iloc[j]["county_id"]),
+                                "date": date_str,
+                                "pixel_x": 0,
+                                "pixel_y": 0,
+                                "ndvi": round(mean_scaled, 4),
+                            })
 
                 cache[basename] = file_records
                 all_records.extend(file_records)
@@ -690,6 +638,12 @@ def _process_geotiff_files(geotiff_files, regions):
 
             if (i + 1) % 10 == 0:
                 print(f"  Processed {i + 1}/{len(geotiff_files)} GeoTIFF files...")
+                if cache_updated:
+                    try:
+                        with open(cache_path, "w") as f:
+                            json.dump(cache, f)
+                    except Exception as e:
+                        print(f"  ⚠ Failed to save cache: {e}")
 
         except Exception as e:
             print(f"  ⚠ Error processing {tif_path}: {e}")

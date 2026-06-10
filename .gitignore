@@ -51,3 +51,5 @@ logs/
 *.swo
 .DS_Store
 Thumbs.db
+demo_video_guide.md
+demo_video_guide.pdf

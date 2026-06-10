@@ -30,12 +30,12 @@ def patched_build_url(self):
 
 cmr.queries.Query._build_url = patched_build_url
 
-# Target tiles matching target countries
-TARGET_TILES = [
-    "h10v04", "h10v05", "h11v04", "h11v05", "h12v10", "h13v10", "h13v11",
-    "h21v08", "h21v09", "h24v05", "h24v06", "h25v06", "h25v07", "h26v04",
-    "h27v05", "h28v05"
-]
+# MODIS sinusoidal tiles covering the US Midwest agricultural regions:
+#   h10v04 — Nebraska, western Iowa
+#   h10v05 — Kansas
+#   h11v04 — Iowa, Illinois
+#   h11v05 — Indiana, southern Illinois
+TARGET_TILES = ["h10v04", "h10v05", "h11v04", "h11v05"]
 MODIS_DIR = "data/raw/modis"
 
 

@@ -51,7 +51,7 @@
                     <span class="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-indigo-400">Climate-Smart Agriculture</span>
                     <span class="text-xs bg-indigo-500/20 text-indigo-400 font-mono px-2.5 py-1 rounded-full uppercase">Big Data Stack</span>
                 </h1>
-                <p class="text-gray-400 mt-1 text-sm md:text-base">Large-Scale Crop Yield Prediction using HDFS, HBase, Hive, PostgreSQL, and PySpark MLlib.</p>
+                <p class="text-gray-400 mt-1 text-sm md:text-base">US Midwest Crop Yield Prediction using HDFS, HBase, Hive, PostgreSQL, and PySpark MLlib.</p>
             </div>
             <div class="mt-4 md:mt-0 flex gap-3 text-xs font-mono">
                 <div class="flex items-center gap-1.5 bg-green-500/10 text-green-400 px-3 py-1.5 rounded-lg border border-green-500/20">
@@ -69,24 +69,24 @@
         <!-- KPI Summary Cards -->
         <section class="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div class="p-4 card rounded-xl">
-                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">HDFS Records Processed</p>
-                <p class="text-2xl font-bold text-emerald-400 mt-1">300,000+</p>
-                <span class="text-xs text-gray-500">Daily Weather + Satellite</span>
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Data Sources</p>
+                <p class="text-2xl font-bold text-emerald-400 mt-1">100% Real</p>
+                <span class="text-xs text-gray-500">NOAA Weather · MODIS NDVI · FAO Yields</span>
             </div>
             <div class="p-4 card rounded-xl">
                 <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Predictive Model Accuracy</p>
-                <p id="model-r2-val" class="text-2xl font-bold text-indigo-400 mt-1">R² = 0.268</p>
+                <p id="model-r2-val" class="text-2xl font-bold text-indigo-400 mt-1">R² = …</p>
                 <span class="text-xs text-gray-500">Spark MLlib Random Forest</span>
             </div>
             <div class="p-4 card rounded-xl">
-                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">HBase Scan Performance</p>
-                <p class="text-2xl font-bold text-cyan-400 mt-1">~0.5 ms</p>
-                <span class="text-xs text-gray-500">Single Key Range Retrieve</span>
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Training Years</p>
+                <p id="training-years-val" class="text-2xl font-bold text-cyan-400 mt-1">—</p>
+                <span class="text-xs text-gray-500">FAO crop yield labels available</span>
             </div>
             <div class="p-4 card rounded-xl">
                 <p class="text-xs font-semibold uppercase tracking-wider text-gray-500">Current Scope</p>
-                <p class="text-2xl font-bold text-white mt-1">25 Regions</p>
-                <span class="text-xs text-gray-500">US, India, Brazil, China, Kenya</span>
+                <p class="text-2xl font-bold text-white mt-1">5 States</p>
+                <span class="text-xs text-gray-500">Iowa · Illinois · Indiana · Nebraska · Kansas</span>
             </div>
         </section>
 
@@ -102,23 +102,20 @@
                         <div class="flex items-center gap-4 text-sm">
                             <label class="text-gray-400">Crop:
                                 <select id="cropSelect" class="bg-gray-800 text-white rounded border border-gray-700 px-2.5 py-1 focus:outline-none">
-                                    <option value="Maize">Maize</option>
-                                    <option value="Wheat">Wheat</option>
-                                    <option value="Rice">Rice</option>
-                                    <option value="Soybean">Soybean</option>
+                                    <!-- Populated dynamically from predictions data -->
                                 </select>
                             </label>
                             <label class="text-gray-400">Year:
                                 <select id="yearSelect" class="bg-gray-800 text-white rounded border border-gray-700 px-2.5 py-1 focus:outline-none">
-                                    <!-- Options will be populated dynamically -->
+                                    <!-- Populated dynamically from predictions data -->
                                 </select>
                             </label>
                         </div>
                     </div>
                     <div id="map"></div>
-                    <div class="mt-3 text-xs text-gray-500 flex justify-between">
-                        <span>💡 Tip: Click on a county polygon to view real-time HBase NDVI vegetation statistics.</span>
-                        <span class="text-emerald-400 font-semibold" id="activeCountyDisplay">Active County: None</span>
+                    <div class="mt-3 text-xs text-gray-500 flex flex-col sm:flex-row justify-between gap-1">
+                        <span>💡 Click a state to view its NDVI trend, weather stream, and yield predictions.</span>
+                        <span class="text-emerald-400 font-semibold" id="activeCountyDisplay">Active State: Iowa</span>
                     </div>
                 </div>
 
@@ -140,8 +137,9 @@
                         <span>NDVI Vegetation Index Trend</span>
                         <span class="text-xs font-mono text-cyan-400 bg-cyan-400/10 px-2 py-0.5 rounded">HBase Live Query</span>
                     </h2>
-                    <p class="text-xs text-gray-500 mb-3">Fetches satellite NDVI measurements from HBase using key prefix scan.</p>
-                    <div class="h-64">
+                    <p class="text-xs text-gray-500 mb-1">Real MODIS MOD13Q1 satellite NDVI from HBase key prefix scan.</p>
+                    <p id="ndviRangeLabel" class="text-xs text-gray-600 mb-2 font-mono"></p>
+                    <div class="h-56">
                         <canvas id="ndviChart"></canvas>
                     </div>
                 </div>
@@ -152,7 +150,7 @@
                         <span>Real-Time Weather Stream</span>
                         <span class="text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded">Spark Streaming Live</span>
                     </h2>
-                    <p class="text-xs text-gray-500 mb-3">Displays real-time daily weather records ingested via simulated Flume & Spark Streaming.</p>
+                    <p class="text-xs text-gray-500 mb-3">Live weather from <a href="https://open-meteo.com" class="text-emerald-500 hover:underline" target="_blank">Open-Meteo API</a>, ingested via Flume agent → HDFS → Spark Structured Streaming → HBase.</p>
                     <div class="h-64 overflow-y-auto pr-1">
                         <table class="w-full text-left text-xs border-collapse">
                             <thead>
@@ -174,8 +172,9 @@
 
                 <!-- Actual vs Predicted Yields -->
                 <div class="card rounded-xl p-4">
-                    <h2 class="text-lg font-bold text-white mb-3">Model Accuracy: Actual vs. Predicted Yield</h2>
-                    <div class="h-64">
+                    <h2 class="text-lg font-bold text-white mb-1">Model Accuracy: Actual vs. Predicted Yield</h2>
+                    <p id="yieldChartSubtitle" class="text-xs text-gray-500 mb-2">Shows all years with FAO yield data for the selected state and crop.</p>
+                    <div class="h-60">
                         <canvas id="yieldChart"></canvas>
                     </div>
                 </div>
@@ -205,8 +204,8 @@
         
         // Setup Map
         function initMap() {
-            // Centered globally
-            map = L.map('map').setView([20.0, 0.0], 2.0);
+            // Centered over United States Midwest agricultural region
+            map = L.map('map').setView([39.8, -95.0], 4.5);
             
             // Dark base layer
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -259,26 +258,88 @@
             }
         }
 
+        // Choropleth coloring helpers
+        function getCountyYield(countyId, crop, year) {
+            const row = predictionsData.find(d => d.county_id === countyId && d.crop === crop && d.year === parseInt(year));
+            return row ? parseFloat(row.predicted_yield) : null;
+        }
+
+        function getYieldRange(crop, year) {
+            const filtered = predictionsData.filter(d => d.crop === crop && d.year === parseInt(year));
+            if (filtered.length === 0) return { min: 0, max: 10 };
+            const yields = filtered.map(d => parseFloat(d.predicted_yield));
+            return {
+                min: Math.min(...yields),
+                max: Math.max(...yields)
+            };
+        }
+
+        function getFeatureColor(yieldVal, minYield, maxYield) {
+            if (yieldVal === null || yieldVal === undefined || isNaN(yieldVal)) {
+                return '#4b5563'; // Gray for no data
+            }
+            if (maxYield === minYield) {
+                return '#059669'; // Steady emerald
+            }
+            const ratio = (yieldVal - minYield) / (maxYield - minYield);
+            // Smooth gradient from HSL 100 (light yellowish green) to 145 (deep emerald)
+            const h = 100 + ratio * 45;
+            const s = 40 + ratio * 45;
+            const l = 30 + ratio * 18;
+            return `hsl(${h}, ${s}%, ${l}%)`;
+        }
+
         function styleFeature(feature) {
             const isSelected = feature.properties.county_id === activeCountyId;
+            const crop = document.getElementById("cropSelect").value;
+            const yearSelect = document.getElementById("yearSelect");
+            const year = yearSelect && yearSelect.value ? yearSelect.value : "2026";
+            
+            const countyYield = getCountyYield(feature.properties.county_id, crop, year);
+            const { min, max } = getYieldRange(crop, year);
+            const fillColor = getFeatureColor(countyYield, min, max);
+            
             return {
-                fillColor: '#4f46e5',
-                weight: isSelected ? 3 : 1.5,
+                fillColor: fillColor,
+                weight: isSelected ? 3.5 : 1.5,
                 opacity: 1,
-                color: isSelected ? '#a78bfa' : '#374151',
-                fillOpacity: isSelected ? 0.45 : 0.2
+                color: isSelected ? '#c084fc' : '#4b5563', // Muted purple border for selected
+                fillOpacity: isSelected ? 0.7 : 0.4
             };
         }
 
         function highlightCountyOnMap(countyId) {
             if (!geojsonLayer) return;
+            geojsonLayer.setStyle(styleFeature);
             geojsonLayer.eachLayer(layer => {
                 if (layer.feature.properties.county_id === countyId) {
-                    layer.setStyle({ weight: 3.5, color: '#a78bfa', fillOpacity: 0.5 });
-                    document.getElementById("activeCountyDisplay").innerText = `Active County: ${layer.feature.properties.name}`;
-                } else {
-                    layer.setStyle({ weight: 1.5, color: '#374151', fillOpacity: 0.2 });
+                    document.getElementById("activeCountyDisplay").innerText = `Active State: ${layer.feature.properties.name}`;
                 }
+            });
+        }
+
+        function updateMapTooltips(crop) {
+            if (!geojsonLayer) return;
+            const year = document.getElementById("yearSelect").value;
+            geojsonLayer.eachLayer(layer => {
+                const countyId = layer.feature.properties.county_id;
+                const countyName = layer.feature.properties.name;
+                const row = predictionsData.find(d => d.county_id === countyId && d.crop === crop && d.year === parseInt(year));
+                
+                let tooltipContent = `<strong class="text-white">${countyName}</strong>`;
+                if (row) {
+                    tooltipContent += `<br/><span class="text-gray-300">Year: ${year}</span>` +
+                                      `<br/><span class="text-indigo-300">Pred: ${parseFloat(row.predicted_yield).toFixed(2)} MT/Ha</span>` +
+                                      `<br/><span class="text-emerald-400">Actual: ${parseFloat(row.actual_yield).toFixed(2)} MT/Ha</span>`;
+                } else {
+                    tooltipContent += `<br/><span class="text-gray-400">No predictions for ${year}</span>`;
+                }
+                
+                layer.bindTooltip(tooltipContent, {
+                    permanent: false,
+                    direction: 'top',
+                    className: 'bg-gray-900 border border-gray-700 text-white text-xs px-2 py-1.5 rounded shadow-xl'
+                });
             });
         }
 
@@ -303,7 +364,14 @@
                 const dates = res.data.map(item => item.date);
                 const ndvis = res.data.map(item => item.ndvi);
                 
-                // Show sample of dates on chart
+                // Show date range label
+                const rangeLabel = document.getElementById("ndviRangeLabel");
+                if (dates.length > 0) {
+                    rangeLabel.innerText = `${dates.length} observations · ${dates[0]} to ${dates[dates.length - 1]}`;
+                } else {
+                    rangeLabel.innerText = "No NDVI data available for this state.";
+                }
+                
                 updateNDVIChart(dates, ndvis);
             } catch (err) {
                 console.error("HBase fetch error:", err);
@@ -320,7 +388,7 @@
                 tbody.innerHTML = "";
                 
                 if (!res.data || res.data.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-gray-500">No live streaming weather data. Run Flume & Spark Streaming to ingest.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-gray-500">No live weather data yet. The Flume agent streams real Open-Meteo observations when running.</td></tr>`;
                     return;
                 }
                 
@@ -433,12 +501,44 @@
                     }
                 }
             });
+
+            // Update subtitle with state name and selected crop
+            const stateRow = predictionsData.find(d => d.county_id === activeCountyId);
+            const stateName = stateRow ? stateRow.county_name : 'Unknown';
+            const subtitle = document.getElementById("yieldChartSubtitle");
+            if (countyData.length === 0) {
+                subtitle.innerText = `No FAO yield data for ${stateName} × ${crop}. Try another crop.`;
+                subtitle.classList.add("text-amber-500");
+                subtitle.classList.remove("text-gray-500");
+            } else {
+                subtitle.innerText = `${stateName} · ${crop} · ${countyData.length} years of FAO data (${years[0]}–${years[years.length-1]})`;
+                subtitle.classList.remove("text-amber-500");
+                subtitle.classList.add("text-gray-500");
+            }
+
+            // Re-render map choropleth when selected crop or year changes
+            if (geojsonLayer) {
+                geojsonLayer.setStyle(styleFeature);
+                updateMapTooltips(crop);
+            }
         }
 
         async function loadPredictions() {
             try {
                 const response = await fetch('/api/predictions');
                 predictionsData = await response.json();
+                
+                // Populate Crop Select Box dynamically from actual data
+                const crops = [...new Set(predictionsData.map(d => d.crop))].sort();
+                const cropSelect = document.getElementById("cropSelect");
+                cropSelect.innerHTML = "";
+                const cropDisplayNames = { "Maize": "Maize (Corn)", "Wheat": "Wheat", "Soybean": "Soybean" };
+                crops.forEach(c => {
+                    const opt = document.createElement("option");
+                    opt.value = c;
+                    opt.innerText = cropDisplayNames[c] || c;
+                    cropSelect.appendChild(opt);
+                });
                 
                 // Populate Year Select Box
                 const years = [...new Set(predictionsData.map(d => d.year))].sort();
@@ -452,6 +552,11 @@
                 });
                 if (years.length > 0) {
                     yearSelect.value = years[years.length - 1]; // Default to latest year
+                }
+                
+                // Update Training Years KPI card
+                if (years.length > 0) {
+                    document.getElementById("training-years-val").innerText = `${years[0]}–${years[years.length - 1]}`;
                 }
                 
                 updateYieldChart();

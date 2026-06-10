@@ -222,7 +222,7 @@ class HDFSSink:
 # Weather Data Producer (Live API)
 # ──────────────────────────────────────────────────────────────────────
 
-# Mapping of the 25 agricultural regions (county_ids 1 to 25) to approximate (lat, lon) coordinates
+# Mapping of the 5 agricultural regions in the USA (county_ids 1 to 5) to approximate (lat, lon) coordinates
 REGION_COORDS = {
     # USA
     1: (42.0, -93.0),   # Iowa
@@ -230,30 +230,6 @@ REGION_COORDS = {
     3: (39.8, -86.1),   # Indiana
     4: (41.5, -99.8),   # Nebraska
     5: (38.5, -98.0),   # Kansas
-    # India
-    6: (31.1, 75.3),    # Punjab
-    7: (23.5, 78.5),    # Madhya Pradesh
-    8: (19.7, 75.7),    # Maharashtra
-    9: (27.6, 80.6),    # Uttar Pradesh
-    10: (27.0, 74.2),   # Rajasthan
-    # Brazil
-    11: (-12.6, -55.6), # Mato Grosso
-    12: (-15.8, -50.1), # Goiás
-    13: (-25.2, -52.0), # Paraná
-    14: (-23.5, -46.6), # São Paulo
-    15: (-18.5, -44.4), # Minas Gerais
-    # China
-    16: (33.9, 113.6),  # Henan
-    17: (36.6, 118.0),  # Shandong
-    18: (47.8, 127.7),  # Heilongjiang
-    19: (32.9, 119.5),  # Jiangsu
-    20: (31.8, 117.2),  # Anhui
-    # Kenya
-    21: (0.5, 35.3),    # Uasin Gishu
-    22: (1.0, 34.9),    # Trans Nzoia
-    23: (-0.3, 36.1),   # Nakuru
-    24: (-0.5, 36.6),   # Nyandarua
-    25: (0.6, 34.6),    # Bungoma
 }
 
 def fetch_live_weather_files(output_dir, rate=60, duration=3600):

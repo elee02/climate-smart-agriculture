@@ -13,8 +13,8 @@ echo -e "${CYAN}================================================================
 echo -e "${GREEN}      CLIMATE-SMART AGRICULTURE: BIG DATA PIPELINE & PREDICTION          ${NC}"
 echo -e "${GREEN}      Real-World Data • Polyglot Persistence • Spark MLlib                ${NC}"
 echo -e "${CYAN}=========================================================================${NC}"
-echo -e "${CYAN}  Countries: US, India, Brazil, China, Kenya (25 agricultural regions)     ${NC}"
-echo -e "${CYAN}  Crops:     Maize, Wheat, Rice, Soybeans                                  ${NC}"
+echo -e "${CYAN}  Countries: United States (5 agricultural regions)                      ${NC}"
+echo -e "${CYAN}  Crops:     Maize (Corn), Wheat, Soybeans                                 ${NC}"
 echo -e "${CYAN}  Data:      FAOSTAT, NOAA GSOD, MODIS NDVI, GADM Boundaries              ${NC}"
 echo -e "${CYAN}=========================================================================${NC}"
 
@@ -36,7 +36,8 @@ fi
 # Step 1: Initialize Docker infrastructure
 # ──────────────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[Step 1/9] Initializing Docker Infrastructure...${NC}"
-docker-compose down -v || true
+# Use plain down instead of down -v to preserve volumes across runs
+docker-compose down || true
 docker-compose up --build -d
 
 # ──────────────────────────────────────────────────────────────────────
@@ -61,8 +62,9 @@ docker exec -i namenode hdfs dfs -mkdir -p /data/weather || true
 docker exec -i namenode hdfs dfs -mkdir -p /data/satellite || true
 docker exec -i namenode hdfs dfs -mkdir -p /data/streaming/weather_incoming || true
 
-# Copy data files into namenode container, then into HDFS
+# Copy data files into namenode container, then into HDFS (always overwrite to ensure latest data is used)
 if [ -f "data/weather_observations.csv" ]; then
+    echo -e "${YELLOW}Uploading latest weather observations to HDFS...${NC}"
     docker cp data/weather_observations.csv namenode:/tmp/weather_observations.csv
     docker exec -i namenode hdfs dfs -put -f /tmp/weather_observations.csv /data/weather/weather_observations.csv
     docker exec -i namenode rm /tmp/weather_observations.csv
@@ -70,6 +72,7 @@ if [ -f "data/weather_observations.csv" ]; then
 fi
 
 if [ -f "data/satellite_ndvi_pixels.csv" ]; then
+    echo -e "${YELLOW}Uploading latest satellite NDVI pixels to HDFS...${NC}"
     docker cp data/satellite_ndvi_pixels.csv namenode:/tmp/satellite_ndvi_pixels.csv
     docker exec -i namenode hdfs dfs -put -f /tmp/satellite_ndvi_pixels.csv /data/satellite/satellite_ndvi_pixels.csv
     docker exec -i namenode rm /tmp/satellite_ndvi_pixels.csv
@@ -79,14 +82,23 @@ fi
 # Upload MODIS GeoTIFF files to HDFS if they exist
 MODIS_COUNT=$(find data/raw/modis -name "*.tif" 2>/dev/null | wc -l)
 if [ "$MODIS_COUNT" -gt 0 ]; then
-    echo -e "${YELLOW}Uploading ${MODIS_COUNT} MODIS GeoTIFF files to HDFS...${NC}"
-    docker exec -i namenode hdfs dfs -mkdir -p /data/satellite/modis || true
-    for tif in data/raw/modis/*.tif; do
-        docker cp "$tif" namenode:/tmp/$(basename "$tif")
-        docker exec -i namenode hdfs dfs -put -f /tmp/$(basename "$tif") /data/satellite/modis/$(basename "$tif")
-        docker exec -i namenode rm /tmp/$(basename "$tif")
-    done
-    echo -e "${GREEN}MODIS GeoTIFF files uploaded to HDFS.${NC}"
+    # Check if files already exist in HDFS
+    HDFS_MODIS_COUNT=$(docker exec -i namenode hdfs dfs -ls /data/satellite/modis 2>/dev/null | grep -c "\.tif$" || true)
+    if [ "$HDFS_MODIS_COUNT" -ge "$MODIS_COUNT" ]; then
+        echo -e "${GREEN}All ${MODIS_COUNT} MODIS GeoTIFF files already exist in HDFS. Skipping upload.${NC}"
+    else
+        echo -e "${YELLOW}Uploading ${MODIS_COUNT} MODIS GeoTIFF files to HDFS in a single batch...${NC}"
+        docker exec -i namenode hdfs dfs -mkdir -p /data/satellite/modis || true
+        # Clean up any partial state in container first
+        docker exec -i namenode rm -rf /tmp/modis || true
+        # Copy the entire directory at once
+        docker cp data/raw/modis namenode:/tmp/modis
+        # Put the whole folder at once to HDFS (this will be extremely fast)
+        docker exec -i namenode sh -c "hdfs dfs -put -f /tmp/modis/*.tif /data/satellite/modis/"
+        # Clean up temp folder in container
+        docker exec -i namenode rm -rf /tmp/modis
+        echo -e "${GREEN}MODIS GeoTIFF files uploaded to HDFS.${NC}"
+    fi
 fi
 
 echo -e "${GREEN}HDFS uploads complete!${NC}"

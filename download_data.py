@@ -33,7 +33,7 @@ import numpy as np
 # Configuration
 # ──────────────────────────────────────────────────────────────────────
 
-# 5 major agricultural countries
+# 5 major agricultural countries (limited to USA for all-real data pipeline)
 TARGET_COUNTRIES = {
     "USA": {
         "name": "United States of America",
@@ -41,47 +41,18 @@ TARGET_COUNTRIES = {
         "noaa_fips": "US",
         "regions": ["Iowa", "Illinois", "Indiana", "Nebraska", "Kansas"],
     },
-    "IND": {
-        "name": "India",
-        "iso3": "IND",
-        "noaa_fips": "IN",
-        "regions": ["Punjab", "Madhya Pradesh", "Maharashtra", "Uttar Pradesh", "Rajasthan"],
-    },
-    "BRA": {
-        "name": "Brazil",
-        "iso3": "BRA",
-        "noaa_fips": "BR",
-        "regions": ["Mato Grosso", "Goiás", "Paraná", "São Paulo", "Minas Gerais"],
-    },
-    "CHN": {
-        "name": "China, mainland",
-        "iso3": "CHN",
-        "noaa_fips": "CH",
-        "regions": ["Henan", "Shandong", "Heilongjiang", "Jiangsu", "Anhui"],
-    },
-    "KEN": {
-        "name": "Kenya",
-        "iso3": "KEN",
-        "noaa_fips": "KE",
-        "regions": ["Uasin Gishu", "Trans Nzoia", "Nakuru", "Nyandarua", "Bungoma"],
-    },
 }
 
-# Target crops (FAO item codes)
+# Target crops (FAO item codes) - Rice dropped as it's not key for Midwest US
 TARGET_CROPS = {
     "Maize (corn)": 56,
     "Wheat": 15,
-    "Rice": 27,
     "Soybeans": 236,
 }
 
 # MODIS tile IDs — one representative tile per country
 MODIS_TILES = {
     "USA": "h10v05",   # Iowa / Illinois
-    "IND": "h25v06",   # Central India
-    "BRA": "h13v10",   # São Paulo / Mato Grosso do Sul
-    "CHN": "h27v05",   # Eastern China (Shandong/Henan)
-    "KEN": "h21v08",   # Central Kenya
 }
 
 # Data directories
@@ -227,9 +198,10 @@ def download_noaa(years):
     inv_df["END"] = pd.to_numeric(inv_df["END"], errors="coerce")
     min_year = min(years)
     max_year = max(years)
+    max_history_date = inv_df["END"].max()
     inv_df = inv_df[
         (inv_df["BEGIN"] <= min_year * 10000 + 101) &
-        (inv_df["END"] >= min(max_year * 10000 + 1231, 20260501))
+        (inv_df["END"] >= min(max_year * 10000 + 1231, int(max_history_date)))
     ]
     # Convert lat/lon to numeric
     inv_df["LAT"] = pd.to_numeric(inv_df["LAT"], errors="coerce")
