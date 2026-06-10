@@ -45,6 +45,59 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
 
 def main(use_cross_validation=True):
     print("--- Starting Spark MLlib Machine Learning Pipeline ---")
+
+    # ── Pre-training check for skip logic ──
+    postgres_uri = os.getenv("POSTGRES_URI", "postgresql://postgres:postgres@postgres:5432/crop_yield_db")
+    mongo_uri = os.getenv("MONGO_URI", "mongodb://mongodb:27017/")
+    current_signature = None
+
+    try:
+        import psycopg2
+        pg_conn = psycopg2.connect(postgres_uri)
+        pg_cursor = pg_conn.cursor()
+
+        pg_cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'yield_features');")
+        features_exists = pg_cursor.fetchone()[0]
+
+        pg_cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'crop_yields');")
+        yields_exists = pg_cursor.fetchone()[0]
+
+        pg_cursor.execute("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'yield_predictions');")
+        preds_exists = pg_cursor.fetchone()[0]
+
+        if features_exists and yields_exists and preds_exists:
+            pg_cursor.execute("SELECT COUNT(*), COALESCE(SUM(avg_ndvi), 0) FROM yield_features;")
+            feat_count, feat_sum = pg_cursor.fetchone()
+
+            pg_cursor.execute("SELECT COUNT(*), COALESCE(SUM(yield_mt_ha), 0) FROM crop_yields;")
+            yield_count, yield_sum = pg_cursor.fetchone()
+
+            pg_cursor.execute("SELECT COUNT(*) FROM yield_predictions;")
+            pred_count = pg_cursor.fetchone()[0]
+
+            pg_cursor.close()
+            pg_conn.close()
+
+            current_signature = f"{feat_count}_{float(feat_sum):.4f}_{yield_count}_{float(yield_sum):.4f}"
+
+            # Check MongoDB
+            mongo_client = MongoClient(mongo_uri)
+            mongo_db = mongo_client["crop_dashboard"]
+            saved_meta = mongo_db["model_metadata"].find_one({"type": "random_forest"})
+            cv_count = mongo_db["cv_results"].count_documents({})
+            feat_imp_count = mongo_db["feature_importance"].count_documents({})
+
+            if (saved_meta and 
+                saved_meta.get("signature") == current_signature and 
+                pred_count > 0 and 
+                cv_count > 0 and 
+                feat_imp_count > 0):
+                print(f"✓ Model inputs have not changed (signature: {current_signature}) and predictions exist.")
+                print("Skipping Random Forest training and cross-validation.")
+                return
+    except Exception as e:
+        print(f"Pre-training check bypassed (tables may not exist yet): {e}")
+
     spark = SparkSession.builder \
         .appName("ClimateSmartAgriculture-ML") \
         .config("spark.sql.catalogImplementation", "hive") \
@@ -311,6 +364,20 @@ def main(use_cross_validation=True):
         print("Predictions inserted into MongoDB yield_predictions collection.")
     except Exception as e:
         print(f"Failed to save predictions to MongoDB: {e}")
+
+    # Save model signature to MongoDB for skip logic
+    if current_signature:
+        try:
+            mongo_client = MongoClient(MONGO_URI)
+            mongo_db = mongo_client["crop_dashboard"]
+            mongo_db["model_metadata"].update_one(
+                {"type": "random_forest"},
+                {"$set": {"signature": current_signature}},
+                upsert=True
+            )
+            print("Model metadata signature saved to MongoDB.")
+        except Exception as e:
+            print(f"Failed to save model metadata signature: {e}")
 
     spark.stop()
     print("\n✓ ML Pipeline Finished successfully.")

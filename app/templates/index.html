@@ -119,11 +119,47 @@
                     </div>
                 </div>
 
-                <!-- Database Performance Comparison -->
+                <!-- Database & Spark Performance Benchmarks -->
                 <div class="card rounded-xl p-4">
-                    <h2 class="text-lg font-bold text-white mb-3">SQL vs NoSQL Query Latency Benchmark</h2>
-                    <div class="h-64">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                        <h2 class="text-lg font-bold text-white">System Performance Benchmarks</h2>
+                        <div class="flex bg-gray-800 rounded-lg p-0.5 text-xs">
+                            <button id="tabLatencyBtn" onclick="switchBenchmarkTab('latency')" class="px-3 py-1.5 rounded-md text-white font-medium bg-indigo-600 transition-all duration-200">Query Latency</button>
+                            <button id="tabScalingBtn" onclick="switchBenchmarkTab('scaling')" class="px-3 py-1.5 rounded-md text-gray-400 hover:text-white font-medium transition-all duration-200">Scaling Analysis</button>
+                            <button id="tabFormatBtn" onclick="switchBenchmarkTab('format')" class="px-3 py-1.5 rounded-md text-gray-400 hover:text-white font-medium transition-all duration-200">ORC vs CSV</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Latency Tab Content -->
+                    <div id="benchmarkLatencyContent" class="h-64">
                         <canvas id="benchmarkChart"></canvas>
+                    </div>
+                    
+                    <!-- Scaling Tab Content -->
+                    <div id="benchmarkScalingContent" class="h-64 hidden">
+                        <canvas id="scalingChart"></canvas>
+                    </div>
+                    
+                    <!-- Format Tab Content -->
+                    <div id="benchmarkFormatContent" class="h-64 hidden flex flex-col justify-center items-center text-center space-y-4 px-4">
+                        <div class="grid grid-cols-2 gap-4 w-full max-w-md">
+                            <div class="bg-gray-800/40 p-4 rounded-xl border border-gray-800/60">
+                                <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Hive ORC Format</p>
+                                <p id="orcLatencyVal" class="text-3xl font-extrabold text-cyan-400 mt-2">—</p>
+                                <p class="text-[10px] text-gray-500 mt-1">Compressed Columnar</p>
+                            </div>
+                            <div class="bg-gray-800/40 p-4 rounded-xl border border-gray-800/60">
+                                <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Raw HDFS CSV</p>
+                                <p id="csvLatencyVal" class="text-3xl font-extrabold text-rose-400 mt-2">—</p>
+                                <p class="text-[10px] text-gray-500 mt-1">Row-oriented Uncompressed</p>
+                            </div>
+                        </div>
+                        <div class="bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 rounded-xl max-w-md w-full">
+                            <p class="text-sm font-semibold text-emerald-400">
+                                Columnar Storage Speedup: <span id="orcSpeedupVal" class="font-extrabold text-xl ml-1">...</span>
+                            </p>
+                            <p class="text-[10px] text-gray-400 mt-1">Enabled by predicate pushdown, columnar projection, and block compression.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -200,7 +236,7 @@
         let geojsonLayer;
         let activeCountyId = 1; // Default: Iowa
         let predictionsData = [];
-        let ndviChart, yieldChart, benchmarkChart, importanceChart;
+        let ndviChart, yieldChart, benchmarkChart, importanceChart, scalingChart;
         
         // Setup Map
         function initMap() {
@@ -614,6 +650,87 @@
             }
         }
 
+        function switchBenchmarkTab(tab) {
+            const tabs = ['latency', 'scaling', 'format'];
+            tabs.forEach(t => {
+                const content = document.getElementById(`benchmark${t.charAt(0).toUpperCase() + t.slice(1)}Content`);
+                const btn = document.getElementById(`tab${t.charAt(0).toUpperCase() + t.slice(1)}Btn`);
+                
+                if (t === tab) {
+                    content.classList.remove('hidden');
+                    btn.classList.add('bg-indigo-600', 'text-white');
+                    btn.classList.remove('text-gray-400', 'hover:text-white');
+                } else {
+                    content.classList.add('hidden');
+                    btn.classList.remove('bg-indigo-600', 'text-white');
+                    btn.classList.add('text-gray-400', 'hover:text-white');
+                }
+            });
+        }
+
+        async function loadScalingBenchmark() {
+            try {
+                const response = await fetch('/api/scaling');
+                const data = await response.json();
+                
+                const datapoints = data.filter(d => d.fraction > 0);
+                const labels = datapoints.map(d => `${(d.fraction * 100).toFixed(0)}% (${d.row_count.toLocaleString()})`);
+                const latencies = datapoints.map(d => d.latency_ms);
+                
+                const ctx = document.getElementById('scalingChart').getContext('2d');
+                if (scalingChart) scalingChart.destroy();
+                
+                scalingChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Execution Time (ms)',
+                            data: latencies,
+                            borderColor: '#818cf8',
+                            backgroundColor: 'rgba(129, 140, 248, 0.1)',
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#818cf8'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { ticks: { color: '#9ca3af' }, grid: { display: false } },
+                            y: { 
+                                ticks: { color: '#9ca3af' }, 
+                                grid: { color: '#1f2937' },
+                                title: { display: true, text: 'Time (ms)', color: '#9ca3af' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Scaling benchmark error:", err);
+            }
+        }
+
+        async function loadFormatComparison() {
+            try {
+                const response = await fetch('/api/format-comparison');
+                const data = await response.json();
+                
+                if (data.orc_latency_ms) {
+                    document.getElementById('orcLatencyVal').innerText = `${data.orc_latency_ms.toFixed(1)} ms`;
+                    document.getElementById('csvLatencyVal').innerText = `${data.csv_latency_ms.toFixed(1)} ms`;
+                    document.getElementById('orcSpeedupVal').innerText = `${data.orc_speedup.toFixed(2)}x Faster`;
+                }
+            } catch (err) {
+                console.error("Format comparison error:", err);
+            }
+        }
+
         async function loadFeatureImportance() {
             try {
                 const response = await fetch('/api/feature-importance');
@@ -682,6 +799,8 @@
             await loadNDVILiveData(activeCountyId);
             await loadWeatherLiveData(activeCountyId);
             await loadBenchmarks();
+            await loadScalingBenchmark();
+            await loadFormatComparison();
             await loadFeatureImportance();
             startWeatherPolling();
         });

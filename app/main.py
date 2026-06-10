@@ -187,6 +187,17 @@ def get_scaling_results():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route('/api/format-comparison')
+def get_format_comparison():
+    """Fetch format comparison benchmark results from MongoDB."""
+    try:
+        db = get_mongo_db()
+        result = db["format_comparison"].find_one({}, {"_id": 0})
+        return jsonify(result or {})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/regions')
 def get_regions():
     """Fetch region metadata from PostgreSQL."""

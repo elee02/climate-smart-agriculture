@@ -33,7 +33,7 @@ services:
       - "9090:9090"   # HBase Thrift API
       - "2181:2181"   # Zookeeper
     volumes:
-      - hbase_data:/data
+      - hbase_data:/hbase-data
     networks:
       - bigdata-net
 

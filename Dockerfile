@@ -31,5 +31,11 @@ COPY spark-defaults.conf /usr/local/lib/python3.10/site-packages/pyspark/conf/sp
 # Create project directories
 RUN mkdir -p data/raw/fao data/raw/noaa data/raw/modis data/raw/gadm data/processed app/templates app/static
 
+# Copy entrypoint script and make it executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+
 # Set default command
 CMD ["python", "app/main.py"]

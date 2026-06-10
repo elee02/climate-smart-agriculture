@@ -177,9 +177,44 @@ docker-compose exec -T app python benchmark.py
 # Step 10: Start persistent background streaming pipeline
 # ──────────────────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[Step 10/10] Starting persistent background streaming pipeline...${NC}"
-docker-compose exec -d app sh -c "python -u flume_agent.py --mode demo --rate 1800 --duration 999999 > /app/data/flume_agent.log 2>&1"
-docker-compose exec -d app sh -c "spark-submit --master local[*] spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1"
-echo -e "${GREEN}Background streaming processes started. Logs available at data/flume_agent.log and data/spark_streaming.log${NC}"
+
+# Function to check if process is running inside container
+check_running_in_container() {
+    docker-compose exec -T app python3 -c "
+import os, sys
+name = sys.argv[1]
+mypid = os.getpid()
+myppid = os.getppid()
+for p in os.listdir('/proc'):
+    if p.isdigit():
+        try:
+            val = int(p)
+            if val == mypid or val == myppid:
+                continue
+            with open(f'/proc/{p}/cmdline', 'r') as f:
+                if name in f.read():
+                    sys.exit(0)
+        except Exception:
+            pass
+sys.exit(1)
+" "$1"
+}
+
+if check_running_in_container "flume_agent.py"; then
+    echo -e "${GREEN}Flume Agent is already running in the background.${NC}"
+else
+    docker-compose exec -d app sh -c "python -u flume_agent.py --mode demo --rate 1800 --duration 999999 > /app/data/flume_agent.log 2>&1"
+    echo -e "${GREEN}Started background Flume Agent.${NC}"
+fi
+
+if check_running_in_container "spark_streaming.py"; then
+    echo -e "${GREEN}Spark Structured Streaming is already running in the background.${NC}"
+else
+    docker-compose exec -d app sh -c "spark-submit --master local[*] spark_streaming.py --duration 999999 --trigger-interval 30 > /app/data/spark_streaming.log 2>&1"
+    echo -e "${GREEN}Started background Spark Structured Streaming.${NC}"
+fi
+
+echo -e "${GREEN}Background streaming processes active. Logs available at data/flume_agent.log and data/spark_streaming.log${NC}"
 
 # ──────────────────────────────────────────────────────────────────────
 # Done
