@@ -140,11 +140,32 @@ docker-compose exec -T app spark-submit \
 # ──────────────────────────────────────────────────────────────────────
 # Step 8: Spark MLlib with cross-validation
 # ──────────────────────────────────────────────────────────────────────
-echo -e "\n${YELLOW}[Step 8/9] Submitting Spark MLlib Job (Random Forest + 5-Fold Cross-Validation)...${NC}"
-docker-compose exec -T app spark-submit \
-  --packages org.postgresql:postgresql:42.6.0 \
-  --master local[*] \
-  ml_model.py
+echo -e "\n${YELLOW}[Step 8/9] Checking if Spark MLlib Model Training can be skipped...${NC}"
+INPUTS_HASH=""
+if [ -f "data/satellite_ndvi_pixels.csv" ] && [ -f "data/weather_observations.csv" ] && [ -f "data/crop_yields.csv" ]; then
+    INPUTS_HASH=$(md5sum data/satellite_ndvi_pixels.csv data/weather_observations.csv data/crop_yields.csv 2>/dev/null | md5sum | awk '{print $1}')
+fi
+
+SKIP_TRAIN=false
+if [ -n "$INPUTS_HASH" ] && [ -f "data/.model_hash" ] && [ "$(cat data/.model_hash)" = "$INPUTS_HASH" ]; then
+    # Verify that yield_predictions table is populated in PostgreSQL
+    PRED_COUNT=$(docker exec -i postgres-db psql -U postgres -d crop_yield_db -t -c "SELECT COUNT(*) FROM yield_predictions;" 2>/dev/null | tr -d '[:space:]')
+    if echo "$PRED_COUNT" | grep -q '^[0-9][0-9]*$' 2>/dev/null && [ "$PRED_COUNT" -gt 0 ]; then
+        echo -e "${GREEN}Model inputs have not changed and predictions exist. Skipping Spark MLlib model training.${NC}"
+        SKIP_TRAIN=true
+    fi
+fi
+
+if [ "$SKIP_TRAIN" = false ]; then
+    echo -e "${YELLOW}Submitting Spark MLlib Job (Random Forest + 5-Fold Cross-Validation)...${NC}"
+    docker-compose exec -T app spark-submit \
+      --packages org.postgresql:postgresql:42.6.0 \
+      --master local[*] \
+      ml_model.py
+    if [ -n "$INPUTS_HASH" ]; then
+        echo "$INPUTS_HASH" > data/.model_hash
+    fi
+fi
 
 # ──────────────────────────────────────────────────────────────────────
 # Step 9: Performance benchmarks
