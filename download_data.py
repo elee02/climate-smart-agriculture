@@ -518,8 +518,8 @@ def main():
     print("╠════════════════════════════════════════════════════════════════╣")
     print(f"║  Source:  {args.source:<51}║")
     print(f"║  Years:   {args.years[0]}–{args.years[1]:<47}║")
-    print(f"║  Countries: US, India, Brazil, China, Kenya                  ║")
-    print(f"║  Crops:   Maize, Wheat, Rice, Soybeans                       ║")
+    print(f"║  Countries: US (5 agricultural states)                       ║")
+    print(f"║  Crops:   Maize, Wheat, Soybeans                             ║")
     print("╚════════════════════════════════════════════════════════════════╝")
 
     ensure_dirs()

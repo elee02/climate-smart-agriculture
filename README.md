@@ -1,6 +1,6 @@
 # Climate-Smart Agriculture: Large-Scale Crop Yield Prediction Using Satellite Imagery and Historical Weather Data
 
-A fully operational big data pipeline that predicts crop yields by integrating satellite vegetation indices (NDVI) with historical weather patterns across 25 agricultural regions in 5 countries. Built with a polyglot persistence architecture spanning **5 database technologies**, processed with the **Hadoop/Spark ecosystem**, and served through a **Flask web dashboard**.
+A fully operational big data pipeline that predicts crop yields by integrating satellite vegetation indices (NDVI) with historical weather patterns across 5 agricultural states in the US Midwest. Built with a polyglot persistence architecture spanning **5 database technologies**, processed with the **Hadoop/Spark ecosystem**, and served through a **Flask web dashboard**.
 
 ## 📺 Demo Video
 
@@ -12,7 +12,7 @@ A fully operational big data pipeline that predicts crop yields by integrating s
 
 ### Problem Statement
 
-How do historical weather patterns and vegetation health influence crop yields across major agricultural regions worldwide, and can we identify areas at risk of declining productivity due to climate shifts?
+How do historical weather patterns and vegetation health influence crop yields across major US Midwest agricultural states, and can we identify areas at risk of declining productivity due to climate shifts?
 
 ### Why Big Data?
 
@@ -82,26 +82,26 @@ All data is sourced from openly available repositories:
 
 | Dataset | Format | Source | Coverage |
 |---------|--------|--------|----------|
-| Crop production statistics (yield, area, production) | Structured CSV | [FAOSTAT](https://www.fao.org/faostat/) | 5 countries, 4 crops, 2015–2019 |
-| Daily weather observations (temp, precip) | Semi-structured CSV | [NOAA GSOD](https://www.ncei.noaa.gov/access/search/data-search/global-summary-of-the-day) via [AWS S3](https://noaa-gsod-pds.s3.amazonaws.com/) | 50 stations across 5 countries |
+| Crop production statistics (yield, area, production) | Structured CSV | [FAOSTAT](https://www.fao.org/faostat/) | United States, 3 crops, 2015–2019 |
+| Daily weather observations (temp, precip) | Semi-structured CSV | [NOAA GSOD](https://www.ncei.noaa.gov/access/search/data-search/global-summary-of-the-day) via [AWS S3](https://noaa-gsod-pds.s3.amazonaws.com/) | 10 stations in the United States |
 | Satellite vegetation index (NDVI) | Unstructured raster (GeoTIFF/HDF) | [NASA MODIS MOD13Q1](https://lpdaac.usgs.gov/products/mod13q1v061/) | 250m, 16-day composites |
-| Administrative boundaries | Shapefile / GeoJSON | [GADM v4.1](https://gadm.org/data.html) | Admin level 1, 5 countries |
+| Administrative boundaries | Shapefile / GeoJSON | [GADM v4.1](https://gadm.org/data.html) | Admin level 1, United States |
 
 ### Geographic Scope
 
-25 agricultural regions across 5 major agricultural countries:
+5 agricultural states in the US Midwest:
 
-| Country | Regions |
-|---------|---------|
-| **United States** | Iowa, Illinois, Indiana, Nebraska, Kansas |
-| **India** | Punjab, Madhya Pradesh, Maharashtra, Uttar Pradesh, Rajasthan |
-| **Brazil** | Mato Grosso, Goiás, Paraná, São Paulo, Minas Gerais |
-| **China** | Henan, Shandong, Heilongjiang, Jiangsu, Anhui |
-| **Kenya** | Uasin Gishu, Trans Nzoia, Nakuru, Nyandarua, Bungoma |
+| State | Significance |
+|-------|-------------|
+| **Iowa** | #1 US corn and soybean producing state |
+| **Illinois** | Major corn, soybean, and wheat producer |
+| **Indiana** | Key corn and soybean belt state |
+| **Nebraska** | Top irrigated agricultural state |
+| **Kansas** | Leading US wheat producing state |
 
 ### Crop Focus
 
-Maize, Wheat, Rice, and Soybeans — selected for their global importance and strong representation across all 5 countries.
+Maize (Corn), Wheat, and Soybeans — selected for their agricultural dominance in the US Midwest.
 
 ---
 
@@ -144,14 +144,14 @@ python download_modis_real.py --token YOUR_TOKEN --years 2015 2019
 - **FAOSTAT:** Bulk CSV download from FAO's public server, filtered for target countries and crops.
 - **NOAA GSOD:** Automated download from AWS S3 public bucket (`noaa-gsod-pds`), no authentication required. Selects stations with best coverage per country.
 - **NASA MODIS:** Automated download of MOD13Q1.061 HDF granules via `earthaccess` and automatic conversion to GeoTIFF (requires free NASA Earthdata account).
-- **GADM:** Downloads admin-level-1 shapefiles for all 5 countries.
+- **GADM:** Downloads admin-level-1 shapefiles for the United States.
 
 ### Data Ingestion (`data_ingest.py`)
 
 Loads downloaded data into the polyglot database layer:
 - GADM shapefiles → PostGIS (real geometries) + MongoDB (GeoJSON)
-- FAOSTAT CSV → PostgreSQL `crop_yields` table (fully matches Soybean statistics by mapping "soy beans" variants, distributed to 25 regions with regional variance)
-- NOAA weather → consolidated CSV mapped to nearest agricultural region
+- FAOSTAT CSV → PostgreSQL `crop_yields` table (fully matches Soybean statistics by mapping "soy beans" variants, distributed to 5 states with regional variance)
+- NOAA weather → consolidated CSV mapped to nearest agricultural state
 - MODIS GeoTIFF → hybrid zonal NDVI statistics via rasterio + rasterstats. It processes available GeoTIFF tiles, automatically falls back to phenology-based NDVI records for missing regions/years (2015-2019), and caches calculated zonal stats in `data/processed_tiles_cache.json` to optimize subsequent runs.
 
 ### PostgreSQL → HDFS Export (`sqoop_ingest.py`)
@@ -179,7 +179,7 @@ Implements the Apache Flume Source-Channel-Sink architecture pattern to ingest l
 - **Memory Channel:** In-memory buffer with configurable capacity (10,000 records)
 - **HDFS Sink:** Batches records and writes to HDFS via WebHDFS in configurable intervals
 
-The producer fetches **real-time weather observations** from the [Open-Meteo API](https://open-meteo.com/) for all 25 agricultural regions, writing CSV files that the agent picks up and streams into HDFS.
+The producer fetches **real-time weather observations** from the [Open-Meteo API](https://open-meteo.com/) for all 5 agricultural states, writing CSV files that the agent picks up and streams into HDFS.
 
 ### Spark Structured Streaming (`spark_streaming.py`)
 
@@ -389,14 +389,12 @@ After pipeline completion:
 
 | Challenge | Solution |
 |-----------|----------|
-| Different spatial resolutions (250m MODIS pixels → irregular admin polygons) | Zonal statistics via rasterio + rasterstats with CRS reprojection |
-| FAO data is country-level, pipeline needs region-level | Distributed to regions with ±15% variance based on agricultural baselines |
-| NOAA station sparsity in some countries (e.g., Kenya) | Nearest-station mapping using spatial distance to region centroids |
-| Data skew across countries | Custom region-balanced partitioning in Spark |
-| MODIS NoData values and scale factors | Handled -3000 fill values, applied ÷10000 scaling in GeoTIFF processing |
-| Real-time ingestion without full Flume/Kafka | Implemented Flume Source-Channel-Sink pattern with live Open-Meteo API data and HDFS persistence |
-| HBase data lost on container restart | Corrected volume mount to `/hbase-data` (where `harisekhon/hbase:1.4` actually stores data) |
-| HDFS SafeMode blocks streaming startup | Added JMX-based SafeMode polling in `entrypoint.sh` before creating directories or launching Spark |
-| Spark Master UI showing no jobs | Configured standalone cluster (Master + Worker) and switched all `spark-submit` from `local[*]` to `spark://spark:7077` |
-| Redundant ML training on unchanged data | Pre-flight PostgreSQL checksum + MongoDB signature comparison skips training when inputs haven't changed |
-| Duplicate streaming processes on restart | `/proc` cmdline scanning in both `entrypoint.sh` and `run_all.sh` prevents spawning duplicates |
+| Different spatial resolutions (250m MODIS pixels → irregular state polygons) | Zonal statistics via `rasterio` + `rasterstats` with CRS reprojection |
+| FAO data is country-level, pipeline needs state-level | Distributed to states with ±15% variance based on agricultural baselines |
+| NOAA station selection for target states | Nearest-station mapping using spatial distance to state centroids |
+| MODIS NoData values and scale factors | Handled −3000 fill values, applied ÷10000 scaling in GeoTIFF processing |
+| Real-time ingestion without full Flume/Kafka | Implemented Flume Source-Channel-Sink pattern with live Open-Meteo API data |
+| HBase data lost on container restart | Corrected volume mount to `/hbase-data` for persistent storage |
+| HDFS SafeMode blocks streaming startup | Added JMX-based SafeMode polling in `entrypoint.sh` |
+| Redundant ML training on unchanged data | Pre-flight PostgreSQL checksum + MongoDB signature comparison skips training |
+| Duplicate streaming processes on restart | `/proc` cmdline scanning prevents spawning duplicates |
