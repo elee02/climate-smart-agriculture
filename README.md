@@ -2,6 +2,12 @@
 
 A fully operational big data pipeline that predicts crop yields by integrating satellite vegetation indices (NDVI) with historical weather patterns across 25 agricultural regions in 5 countries. Built with a polyglot persistence architecture spanning **5 database technologies**, processed with the **Hadoop/Spark ecosystem**, and served through a **Flask web dashboard**.
 
+## 📺 Demo Video
+
+[![Climate-Smart Agriculture Demo Video](https://img.youtube.com/vi/fK_a4iR-R2I/0.jpg)](https://www.youtube.com/watch?v=fK_a4iR-R2I)
+
+*Click the image above to watch the end-to-end walkthrough of the dashboard, real-time ingestion pipeline, and Spark MLlib model execution.*
+
 ## Overview
 
 ### Problem Statement
@@ -37,7 +43,7 @@ How do historical weather patterns and vegetation health influence crop yields a
 │  │                    HDFS (Distributed Storage)                       │    │
 │  │  /data/weather/  /data/satellite/  /data/streaming/  /user/hive/   │    │
 │  └─────────────────────────┬───────────────────────────────────────────┘    │
-│                            │                                                │
+│                            │                                               │
 │  ┌─────────────────────────▼───────────────────────────────────────────┐    │
 │  │                   PySpark ETL Pipeline                              │    │
 │  │  • Zonal Statistics (GeoTIFF → mean NDVI per region)               │    │
@@ -45,14 +51,14 @@ How do historical weather patterns and vegetation health influence crop yields a
 │  │  • Growing Degree Days (GDD) & Cumulative Rainfall                 │    │
 │  │  • Feature Engineering (lag variables, temporal joins)              │    │
 │  └───┬──────────┬──────────┬───────────────────────────────────────────┘    │
-│      │          │          │                                                │
-│      ▼          ▼          ▼                                                │
-│  ┌────────┐ ┌────────┐ ┌────────────────┐ ┌───────────┐ ┌───────────┐      │
-│  │ HBase  │ │ Hive   │ │ PostgreSQL     │ │ MongoDB   │ │ Spark     │      │
-│  │ NoSQL  │ │ ORC    │ │ + PostGIS      │ │ GeoJSON   │ │ Streaming │      │
-│  │ NDVI   │ │ Weather│ │ Features+Preds │ │ Dashboard │ │ Real-time │      │
-│  │ Series │ │ Indices│ │ Crop Yields    │ │ Maps      │ │ Weather   │      │
-│  └────────┘ └────────┘ └───────┬────────┘ └─────┬─────┘ └───────────┘      │
+│      │          │          │                                               │
+│      ▼          ▼          ▼                                               │
+│  ┌────────┐ ┌────────┐ ┌────────────────┐ ┌───────────┐ ┌───────────┐     │
+│  │ HBase  │ │ Hive   │ │ PostgreSQL     │ │ MongoDB   │ │ Spark     │     │
+│  │ NoSQL  │ │ ORC    │ │ + PostGIS      │ │ GeoJSON   │ │ Streaming │     │
+│  │ NDVI   │ │ Weather│ │ Features+Preds │ │ Dashboard │ │ Real-time │     │
+│  │ Series │ │ Indices│ │ Crop Yields    │ │ Maps      │ │ Weather   │     │
+│  └────────┘ └────────┘ └───────┬────────┘ └─────┬─────┘ └───────────┘     │
 │                                │                │                          │
 │  ┌─────────────────────────────▼────────────────▼──────────────────────┐    │
 │  │                  Spark MLlib (Random Forest)                        │    │
